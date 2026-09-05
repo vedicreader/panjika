@@ -1,4 +1,4 @@
-"""Did the change land, and if not, what happened to it.
+"""did the change land, and if not, what happened to it
 
 Docs: https://vedicreader.github.io/panjika/git.html.md"""
 
@@ -17,7 +17,7 @@ from fastcore.foundation import L
 from gheasy.repo import GitError, GitRepo
 
 from .core import DETAIL, Home, file_hash, fold, git_root, hashed, now
-from .read import Ledger, _since
+from .core import Ledger, _since
 
 # %% ../nbs/03_git.ipynb #325bf7eb
 STATES = ('landed', 'partly_landed', 'pending', 'replaced', 'gone', 'untracked',
@@ -307,7 +307,7 @@ def report(session=None, path='', home=None, start='.', ledger=None):
 # %% ../nbs/03_git.ipynb #1dca0543
 def link_commit(sha='HEAD', home=None, start='.', lookback='7d'):
     "Record `sha` against every session that recently touched a file in it. Returns those sessions."
-    from panjika.write import Scribe
+    from panjika.core import Scribe
     led = Ledger(home, start)
     root = git_root(led.home.root) or git_root(start)
     if root is None: return L()

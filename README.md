@@ -235,14 +235,11 @@ uv run nbdev-test        # execute every notebook, which is the whole suite
 uv run nbdev-clean       # before committing
 ```
 
-The tests are cells in the notebooks, and they are also the documentation for what they
-test. Each drives a real repository rather than a stub. `03_git.ipynb` walks one file
-through `pending`, `landed`, `partly_landed`, `replaced`, `untracked` and `gone`, and then
-deletes the machine-local tier to ask the same question from the far side of a clone.
-`00_core.ipynb` merges two branches that both appended. `06_backfill.ipynb` imports a
-transcript and asks `landed` about the session in it. The shell-command table in
-`06_backfill.ipynb` and the payload shapes in `04_harness.ipynb` are worth reading as well as
-running.
+The tests are cells in the notebooks, and they double as the documentation. Each drives a
+real repository rather than a stub. `03_git.ipynb` walks one file through every verdict
+state and every branch case. `00_core.ipynb` holds the record, the writer and the reader,
+and merges two branches that both appended. `06_backfill.ipynb` imports a transcript and
+asks `landed` about it.
 
 ## License
 

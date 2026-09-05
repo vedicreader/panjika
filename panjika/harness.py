@@ -1,4 +1,4 @@
-"""Getting the record out of whichever agent is running.
+"""getting the record out of whichever agent is running
 
 Docs: https://vedicreader.github.io/panjika/harness.html.md"""
 
@@ -19,7 +19,7 @@ from fastcore.basics import AttrDict
 from fastcore.foundation import L
 
 from .core import Home, now
-from .write import Scribe, action_for, repo_facts
+from .core import Scribe, action_for, repo_facts
 
 # %% ../nbs/04_harness.ipynb #322cecdf
 def plan(session='', start='', **acts):

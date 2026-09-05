@@ -1,4 +1,4 @@
-"""`panjika log`, `panjika trail`, `panjika landed`.
+"""`panjika log`, `panjika trail`, `panjika landed`
 
 Docs: https://vedicreader.github.io/panjika/cli.html.md"""
 
@@ -19,7 +19,7 @@ from fastcore.foundation import L
 from .core import DETAIL, LEDGER, Home, dumps, records
 from .git import blend, landed, link_commit, report
 from .harness import ADAPTERS, hook, ingest, install
-from .read import Ledger, _since
+from .core import Ledger, _since
 
 # %% ../nbs/05_cli.ipynb #2bdd45a6
 STATE_COLOURS = {'landed': '32', 'partly_landed': '33', 'pending': '36', 'replaced': '31',
