@@ -8,8 +8,10 @@ the documentation for what it tests.
 
 - `requires-python` is `>=3.11`. It said `>=3.10`, which no resolver could satisfy: `gheasy` has
   required 3.11 since the version this depends on.
-- A `replaced` verdict carries the commits that took the change out as fields. They were named
-  in the prose of `why` and nowhere a reader of the record could reach them.
+- A `replaced` verdict carries the commit that owns those lines now as a field. It was named in
+  the prose of `why` and nowhere a reader of the record could reach it. Only that one commit:
+  the commit that landed the change also touched the file after the session began, and a field
+  about who owns the lines now that lists the change's own commit is worse than an empty one.
 - `panjika export` writes text when stdout has no byte stream, rather than raising
   `AttributeError` into a caller that redirected it.
 - A Ramabana session is stamped when its turn ran. The adapter ignored the `at` the turn record

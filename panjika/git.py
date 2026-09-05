@@ -176,9 +176,10 @@ def verdict_for(ledger, touches, repo=None, root=None, cache=None):
         later = _replaced_by(repo, path, after)
         who = f'; {later[0]["short"]} {later[0]["subject"][:60]!r} by {later[0]["author"]} owns it now' if later else ''
         v.state, v.why = 'replaced', f'none of the {total} lines this session wrote are in the file{who}'
-        # the commits that took the change out. `why` names the first of them in prose, and a
-        # reader of the record rather than the sentence needs them as fields
-        v.commits = [commit_row(repo, c['oid'], cache) for c in later]
+        # the commit that owns those lines now, which is the one `why` names. `later` holds
+        # everything that touched the path since the session began -- the commit that landed
+        # the change among them -- so only the newest belongs in a field about who owns it.
+        v.commits = [commit_row(repo, later[0]['oid'], cache)] if later else []
     elif not committed:
         v.state, v.why = 'pending', f'all {kept} surviving lines are uncommitted in the working tree'
     elif kept < total:
