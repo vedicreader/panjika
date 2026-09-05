@@ -85,7 +85,7 @@ def cmd_show(a):
     if a.json: return out_json(dict(row))
     print(tint(f"{row.session}  {row.get('harness', '?')}/{row.get('model') or '?'}", '33'))
     print(f"  {row.get('title') or row.get('prompt') or ''}")
-    print(f"  {row.get('repo', '')} {row.get('branch', '')}  {ago(row.get('started'))}  "
+    print(f"  {row.get('repo', '')} {row.get('branch', '')}  {ago(row.get('started') or row.get('at'))}  "
           f"{row.n_steps} steps, {row.steps_fail} failed")
     for p, origin in row.get('prompts', [])[1:]:
         mark = tint('>', '36') if origin != 'injected' else tint('~', '90')

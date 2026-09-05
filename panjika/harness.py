@@ -192,9 +192,13 @@ def ramabana(payload):
             args=p.get('args'), output=p.get('detail'))
         if _act_path(p): act(out, 'touch', path=_act_path(p), action='edit')
         return out
-    usage = p.get('usage') or {}
+    usage, at = p.get('usage') or {}, p.get('at')
+    # `at` is when the turn ran. Ramabana hands a turn over as it finishes, but it also replays
+    # its own history, and a session stamped at ingest sorts as the newest thing that ever
+    # happened -- which is what `log`, `--since` and a bare `landed` all resolve through.
     act(out, 'write', kind='session', harness='ramabana', model=str(p.get('model') or ''),
         prompt=str(p.get('prompt') or '')[:2000], status=str(p.get('state') or 'done'),
+        at=at, started=at,
         tokens_in=usage.get('input'), tokens_out=usage.get('output'), cost=usage.get('cost'))
     for a in (p.get('activity') or ()):
         act(out, 'step', tool=str(a.get('tool') or ''), target=_act_target(a),

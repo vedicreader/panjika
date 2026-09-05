@@ -51,8 +51,10 @@ class Ledger:
         return self.all(tier).filter(lambda r: r.kind == kind)
 
 # %% ../nbs/02_read.ipynb #1dd2089f
-#: Fields whose first value is the one that describes the session, not their last.
-OPENING = ('prompt',)
+#: Fields whose first value is the one that describes the session, not their last. A session's
+#: opening ask is what it was for, and its start is when it began; a harness that describes one
+#: session with a record per turn writes both again on every turn.
+OPENING = ('prompt', 'started')
 
 
 def asks(recs, sid):
@@ -155,7 +157,10 @@ def session(self:Ledger, sid):
             key=lambda r: r.get('at') or 0)
     row['files'] = self.files(sid)
     row.update(counters(row.steps))
-    row['seconds'] = round((row.get('ended') or row.get('at') or 0) - (row.get('started') or 0), 1)
+    # an adapter that records a session without a `begin` leaves no `started`, and subtracting
+    # zero from an epoch would report the age of the epoch as the length of the session
+    began = row.get('started') or row.get('at') or 0
+    row['seconds'] = round((row.get('ended') or row.get('at') or 0) - began, 1) if began else 0.0
     return row
 
 # %% ../nbs/02_read.ipynb #c98a1e17

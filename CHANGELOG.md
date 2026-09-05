@@ -12,6 +12,13 @@ the documentation for what it tests.
   in the prose of `why` and nowhere a reader of the record could reach them.
 - `panjika export` writes text when stdout has no byte stream, rather than raising
   `AttributeError` into a caller that redirected it.
+- A Ramabana session is stamped when its turn ran. The adapter ignored the `at` the turn record
+  carries, so a session was dated when the ledger read it, which is what `log`, `--since` and a
+  bare `landed` all resolve through.
+- `panjika show` reported a session with no `started` as `56y ago` and its length as the age of
+  the epoch. Ramabana never calls `begin`, so it has none; every other reader already fell back
+  to the record's own `at`. `started` joins `prompt` as a field folding keeps the earliest value
+  of, since a harness that writes one record per turn repeats it on every turn.
 
 ## 0.0.3
 
