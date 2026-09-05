@@ -1,10 +1,11 @@
-__version__ = "0.0.3"
+"""The names an agent reaches for. Everything else is one module down.
 
-# The names an agent reaches for. Everything else is one module down.
-#
-# `landed` and `trail` are the two that matter: what became of what I wrote, and who has
-# touched this file before me. Both work with no arguments beyond a path, because the ledger
-# for the repository you are standing in is found by walking up from the working directory.
+`landed` and `trail` are the two that matter: what became of what I wrote, and who has touched
+this file before me. Both work with no arguments beyond a path, because the ledger for the
+repository you are standing in is found by walking up from the working directory.
+"""
+
+__version__ = "0.0.3"
 
 from panjika.core import Home, find_home
 from panjika.git import Verdict, blend as trail, landed, link_commit, report

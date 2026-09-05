@@ -8,7 +8,7 @@ Docs: https://vedicreader.github.io/panjika/harness.html.md"""
 __all__ = ['PATH_KEYS', 'TARGET_KEYS', 'CODEX_EDITS', 'ADAPTERS', 'CC_EVENTS', 'POST_COMMIT', 'CODEX_EVENTS', 'CODEX_TRUST',
            'CODEX_SNIPPET', 'SKILL_DIRS', 'plan', 'act', 'first_of', 'tool_target', 'tool_path', 'claude_code',
            'patch_paths', 'codex_paths', 'codex', 'codex_notify', 'ramabana', 'generic', 'ingest', 'hook',
-           'codex_hooks', 'cc_settings', 'skill_md', 'skill_body', 'write_skill', 'install']
+           'codex_hooks', 'cc_settings', 'skill_md', 'frontmatter', 'skill_body', 'write_skill', 'install']
 
 # %% ../nbs/04_harness.ipynb #c9717a73
 import json, os, re, sys
@@ -308,12 +308,26 @@ def skill_md():
     return (files('panjika')/'SKILL.md').read_text(encoding='utf-8')
 
 
-def skill_body(text=None):
-    "A skill document without its YAML frontmatter."
-    text = skill_md() if text is None else text
-    if not text.startswith('---'): return text
+def frontmatter(text):
+    "The `name` and `description` of a skill document, and the body after them."
+    if not text.startswith('---\n'): return {}, text
     end = text.find('\n---', 3)
-    return text if end < 0 else text[end + 4:].lstrip('\n')
+    if end < 0: return {}, text
+    meta, key = {}, ''
+    for line in text[4:end].splitlines():
+        if line[:1] not in (' ', '\t') and ':' in line:
+            key, _, v = line.partition(':')
+            key = key.strip()
+            meta[key] = v.strip().lstrip('>|').strip()
+        elif key: meta[key] = f'{meta[key]} {line.strip()}'.strip()
+    return meta, text[end + 4:].lstrip('\n')
+
+
+def skill_body(text=None):
+    "A skill document as a pyskill body: its description first, then the prose."
+    meta, body = frontmatter(skill_md() if text is None else text)
+    desc = ' '.join((meta.get('description') or '').split())
+    return f'{desc}\n\n{body}' if desc else body
 
 
 def write_skill(root='.', dirs=SKILL_DIRS):

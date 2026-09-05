@@ -6,7 +6,7 @@ Docs: https://vedicreader.github.io/panjika/git.html.md"""
 
 # %% auto #0
 __all__ = ['STATES', 'EVIDENCE', 'UNCOMMITTED', 'Verdict', 'blame_rows', 'commit_row', 'match_lines', 'local_branches',
-           'lines_on', 'surviving_branches', 'verdict_for', 'landed', 'report', 'link_commit', 'blend']
+           'blobs_at', 'lines_on', 'surviving_branches', 'verdict_for', 'landed', 'report', 'link_commit', 'blend']
 
 # %% ../nbs/03_git.ipynb #28120a95
 from dataclasses import dataclass, field
@@ -106,9 +106,22 @@ def local_branches(repo):
     return [b.strip() for b in out.splitlines() if b.strip()]
 
 
-def lines_on(repo, branch, path, wanted):
-    "How many of the recorded line hashes `path` still holds on `branch`."
-    try: text = repo.run('show', f'{branch}:{path}')
+def blobs_at(repo, path, branches):
+    "The blob id of `path` on each branch that has it, in one call."
+    if not branches: return {}
+    spec = ''.join(f'{b}:{path}\n' for b in branches)
+    try: out = repo.run('cat-file', '--batch-check=%(objectname) %(objecttype)', input=spec)
+    except Exception: return {}
+    found = {}
+    for b, line in zip(branches, out.splitlines()):
+        bits = line.split()
+        if len(bits) == 2 and bits[1] == 'blob': found[b] = bits[0]
+    return found
+
+
+def lines_on(repo, spec, wanted):
+    "How many of the recorded line hashes the blob at `spec` still holds."
+    try: text = repo.run('show', spec)
     except Exception: return 0
     pool = {}
     for line in text.splitlines():
@@ -120,11 +133,13 @@ def lines_on(repo, branch, path, wanted):
     return kept
 
 
-def surviving_branches(repo, path, wanted, skip=''):
-    "The branches, other than `skip`, holding every line the session wrote."
+def surviving_branches(repo, path, wanted, branches=None):
+    "Every branch whose committed copy of `path` still holds every line the session wrote."
     if not wanted: return []
-    return [b for b in local_branches(repo)
-            if b != skip and lines_on(repo, b, path, wanted) == len(wanted)]
+    branches = local_branches(repo) if branches is None else branches
+    blobs = blobs_at(repo, path, branches)
+    kept = {oid: lines_on(repo, oid, wanted) for oid in set(blobs.values())}
+    return [b for b in branches if kept.get(blobs.get(b, ''), 0) == len(wanted)]
 
 
 def _head_branch(repo):
@@ -132,6 +147,13 @@ def _head_branch(repo):
     try: name = repo.run('rev-parse', '--abbrev-ref', 'HEAD').strip()
     except Exception: return ''
     return '' if name == 'HEAD' else name
+
+
+def _refs(repo, cache=None):
+    "The checked-out branch and every local branch, asked for once per `landed` call."
+    if cache is None: return _head_branch(repo), local_branches(repo)
+    if ('refs',) not in cache: cache[('refs',)] = (_head_branch(repo), local_branches(repo))
+    return cache[('refs',)]
 
 
 def _wanted(ledger, touches):
@@ -183,17 +205,19 @@ def verdict_for(ledger,
     repo = repo or GitRepo(root)
     path, action = touch.path, touch.get('action', 'edit')
     target, after = root/path, touches[0].get('at') or 0
-    wanted, here = _wanted(ledger, touches), _head_branch(repo)
-    gone = bool(branch) and branch != here and branch not in local_branches(repo)
+    wanted = _wanted(ledger, touches)
+    here, branches = _refs(repo, cache)
+    gone = bool(branch) and branch != here and branch not in branches
 
     def out(v):
         v.branch, v.branch_gone = branch, gone
         if v.state in ('replaced', 'gone') and v.total:
-            v.elsewhere = surviving_branches(repo, path, wanted, here)
-            if v.elsewhere: v.why += f'; still on {", ".join(v.elsewhere)}'
-            else: v.why += '; and on no other branch either'
+            v.elsewhere = surviving_branches(repo, path, wanted, branches)
+            found = (f'still on {", ".join(v.elsewhere)}' if v.elsewhere
+                     else 'on no branch in this repository')
+            v.why = f'{v.why.rstrip(". ")}; {found}'
         if gone and v.state != 'landed':
-            v.why = f'{v.why}; the branch {branch} it ran on is gone'.lstrip('; ')
+            v.why = f'{v.why.rstrip(". ")}; the branch {branch} it ran on is gone'.lstrip('; ')
         return v
 
     if not target.exists():
@@ -240,13 +264,20 @@ def verdict_for(ledger,
     return out(v)
 
 # %% ../nbs/03_git.ipynb #07be1d6e
+def _same_repo(row, root):
+    "Whether a session row was recorded in the repository being asked about."
+    where = row.get('root') or ''
+    return not where or Path(where) == Path(root)
+
+
 def landed(session=None, path='', home=None, start='.', ledger=None):
     "What became of what was written, as one `Verdict` per file. Answers for the newest session by default."
     led = ledger or Ledger(home, start)
     root = git_root(led.home.root) or git_root(start)
     if root is None: return L()
     repo, cache = GitRepo(root), {}
-    on = {r.session: r.get('branch') or '' for r in fold(led.of('session'))}
+    on = {r.session: (r.get('branch') or '') if _same_repo(r, root) else ''
+          for r in fold(led.of('session'))}
     if path and not session:
         groups = [[t for t in led.of('touch') if t.session == r.session and t.get('path') == path]
                   for r in led.trail(path)]

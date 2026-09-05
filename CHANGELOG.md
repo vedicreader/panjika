@@ -22,9 +22,9 @@ the documentation for what it tests.
   to the record's own `at`. `started` joins `prompt` as a field folding keeps the earliest value
   of, since a harness that writes one record per turn repeats it on every turn.
 - A verdict says which branch. `branch` is the branch the session ran on, `branch_gone` says it
-  has since been deleted, `elsewhere` names the branches that still hold every line, and
-  `anywhere` is false only when the change is in no branch of the repository. A change made on a
-  feature branch read as `replaced` from `main` with nothing to say why.
+  has since been deleted, `elsewhere` names the branches whose committed copy still holds
+  every line, and `anywhere` says whether panjika can point at the lines anywhere. A change made
+  on a feature branch read as `replaced` from `main` with nothing to say why.
 - `_replaced_by` asks git for `HEAD` rather than every ref. gheasy's `history` defaults to
   `--all`, so the commit named as owning the lines now could be one on another branch that never
   touched this one.
@@ -34,7 +34,7 @@ the documentation for what it tests.
   `.claude/skills/panjika/`, `.agents/skills/panjika/` and `.codex/skills/panjika/`, and
   `[project.entry-points.pyskills]` publishes the same text. There were three copies of it in the
   repository, kept in sync by hand.
-- Every code comment is gone and every docstring is one line. The explanations moved into the
+- Every code comment is gone from the package and every docstring is one line. The explanations moved into the
   notebook prose, which is where the documentation is built from.
 
 ## 0.0.3

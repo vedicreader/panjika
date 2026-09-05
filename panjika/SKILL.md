@@ -55,13 +55,16 @@ A verdict is about one working tree. Three fields say which.
 
 - `branch` is the branch the session ran on.
 - `branch_gone` is true when that branch no longer exists.
-- `elsewhere` names the branches that still hold every line, and is filled in when the state is
-  `replaced` or `gone`.
-- `anywhere` is false only when the lines are in no branch of this repository.
+- `elsewhere` names the branches whose committed copy of the file still holds every line. It is
+  filled in for `replaced` and `gone`, and only when a line record exists.
+- `anywhere` is true for `landed`, `partly_landed` and `pending`, and for anything `elsewhere`
+  found. It is false for `uncertain`, `unknown` and `untracked` too, because none of those knows
+  where the lines are.
 
 A change made on a feature branch reads as `replaced` from `main`. Check `elsewhere` before
-concluding anything from `replaced`. `replaced` with an empty `elsewhere` means the work is gone
-from the repository.
+concluding anything from `replaced`. `replaced` with an empty `elsewhere` and `evidence` of
+`lines` means the work is on no branch here. Two branches that wrote the same line
+independently both count as holding it, because the match is on content.
 
 ## Planning against it
 

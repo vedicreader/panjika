@@ -53,7 +53,8 @@ panjika backfill    # and everything that already happened, out of the transcrip
 `.git/hooks/post-commit`. Codex will not run a hook until you have reviewed it with `/hooks`.
 
 It also writes `SKILL.md` into `.claude/skills/panjika/`, `.agents/skills/panjika/` and
-`.codex/skills/panjika/`. One file ships inside the package and every copy comes from it.
+`.codex/skills/panjika/`, which `--no-skill` turns off. One file ships inside the package and
+every copy comes from it.
 `[project.entry-points.pyskills]` publishes the same text to a harness that reads skills from
 installed packages rather than from disk.
 
@@ -76,8 +77,16 @@ A verdict is about one working tree. A change made on a feature branch reads as 
 `main`, and reads correctly from the branch itself.
 
 `branch` is the branch the session ran on. `branch_gone` says that branch is now deleted.
-`elsewhere` names the branches that still hold every line, filled in when the state is
-`replaced` or `gone`. `anywhere` is false only when the lines are in no branch at all.
+`elsewhere` names the branches whose committed copy of the file still holds every line, and is
+filled in for a `replaced` or `gone` verdict that has a line record. The verdict reads the
+working tree and `elsewhere` reads what each branch has committed, so the branch you are
+standing on counts: a change committed on `main` and then reverted in the working tree is
+`replaced` and still on `main`.
+
+`anywhere` is true for `landed`, `partly_landed` and `pending`, and for anything `elsewhere`
+found. It is false for `uncertain`, `unknown` and `untracked` as well, because none of those
+knows where the lines are. Read it as "panjika can point at these lines", not as proof they are
+gone.
 
 ```
 $ panjika landed rb-0c7e            # standing on main
