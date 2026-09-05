@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+_docs/
+_proc/
+build/
+dist/
+*.egg-info/
+
+# panjika's own ledger, if you run it in here. The ledger belongs to a project being
+# worked on, not to the package that writes it.
+.panjika/
+uv.lock

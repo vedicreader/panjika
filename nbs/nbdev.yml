@@ -1,0 +1,14 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "panjika"
+  site-url: "https://vedicreader.github.io/panjika"
+  description: "the register of deeds: an append-only ledger of agent sessions, the files they touched, and where those changes landed in git"
+  repo-branch: main
+  repo-url: "https://github.com/vedicreader/panjika"
+
+format-links:
+  - html
+  - format: commonmark
+    text: Markdown

@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "panjika"
+dynamic = ["version"]
+description = "the register of deeds: an append-only ledger of agent sessions, the files they touched, and where those changes landed in git"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+authors = [{name = "Karthik Rajgopal", email = "karthik.rajgopal@hotmail.com"}]
+keywords = ['nbdev', 'agent', 'ledger', 'provenance', 'git', 'jsonl']
+classifiers = ["Natural Language :: English", "Intended Audience :: Developers",
+               "Development Status :: 3 - Alpha", "Programming Language :: Python :: 3",
+               "Programming Language :: Python :: 3 :: Only"]
+dependencies = ['fastcore>=1.8.17', 'orjson>=3.10', 'gheasy>=0.0.10']
+
+[project.scripts]
+panjika = "panjika.cli:main"
+
+[project.urls]
+Repository = "https://github.com/vedicreader/panjika"
+Documentation = "https://vedicreader.github.io/panjika"
+
+[project.entry-points.nbdev]
+panjika = "panjika._modidx:d"
+
+[tool.setuptools.dynamic]
+version = {attr = "panjika.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["panjika"]
+
+[tool.nbdev]
+doc_host = "https://vedicreader.github.io"
+doc_baseurl = "/panjika"
+
+[dependency-groups]
+dev = ['nbdev>=2.4.6', 'ipykernel>=6.29']
