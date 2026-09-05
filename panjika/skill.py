@@ -1,4 +1,4 @@
-"""the skill, for a harness that reads them from packages
+"""the skill, for a harness that reads skills from packages
 
 Docs: https://vedicreader.github.io/panjika/skill.html.md"""
 

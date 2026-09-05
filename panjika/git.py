@@ -1,4 +1,4 @@
-"""did the change land, and if not, what happened to it
+"""did the change go into git, and if not, what replaced it
 
 Docs: https://vedicreader.github.io/panjika/git.html.md"""
 
@@ -29,7 +29,7 @@ UNCOMMITTED = '0' * 40
 # %% ../nbs/03_git.ipynb #34c89b6f
 @dataclass
 class Verdict:
-    "What became of one session's change to one file."
+    "What happened to the change that one session made to one file."
     path: str
     state: str = 'unknown'
     why: str = ''
@@ -45,17 +45,17 @@ class Verdict:
 
     @property
     def done(self):
-        "Whether the change is in the history and needs nothing further."
+        "Whether the change is in git and needs no more work."
         return self.state == 'landed'
 
     @property
     def anywhere(self):
-        "Whether the lines are still somewhere in this repository."
+        "Whether the lines are still in this repository."
         return self.state in ('landed', 'partly_landed', 'pending') or bool(self.elsewhere)
 
     @property
     def survived(self):
-        "The share of the lines this session wrote that are still in the file."
+        "The fraction of the session lines that are still in the file."
         return 0.0 if not self.total else round(self.kept / self.total, 3)
 
     def line(self):
@@ -64,18 +64,18 @@ class Verdict:
         return f'{self.state:<14} {self.path}{share}  {self.why}'.rstrip()
 
     def dict(self):
-        "The verdict as a record, with the computed fields spelled out."
+        "The verdict as a record, with the computed fields."
         return AttrDict(self.__dict__ | {'survived': self.survived, 'anywhere': self.anywhere})
 
 # %% ../nbs/03_git.ipynb #973bde09
 def blame_rows(repo, path):
-    "Every line of `path` with the commit that owns it, or `None` when git will not blame it."
+    "Every line of `path` with the commit that owns it, or `None` if git cannot blame it."
     try: return repo.blame(str(path))
     except (GitError, Exception): return None
 
 
 def commit_row(repo, oid, cache=None):
-    "One commit as the few fields a verdict quotes."
+    "The fields of one commit that a verdict uses."
     if cache is not None and oid in cache: return cache[oid]
     try:
         d = repo.commit_detail(oid)
@@ -88,7 +88,7 @@ def commit_row(repo, oid, cache=None):
 
 
 def match_lines(wanted, rows):
-    "Pair each recorded line hash with an unclaimed line of the file that hashes the same."
+    "Match each recorded line hash to a line of the file with the same hash."
     pool = {}
     for r in rows: pool.setdefault(hashed(r.get('text', '')), []).append(r)
     found, missing = [], 0
@@ -120,7 +120,7 @@ def blobs_at(repo, path, branches):
 
 
 def lines_on(repo, spec, wanted):
-    "How many of the recorded line hashes the blob at `spec` still holds."
+    "The number of recorded line hashes that the blob at `spec` still has."
     try: text = repo.run('show', spec)
     except Exception: return 0
     pool = {}
@@ -134,7 +134,7 @@ def lines_on(repo, spec, wanted):
 
 
 def surviving_branches(repo, path, wanted, branches=None):
-    "Every branch whose committed copy of `path` still holds every line the session wrote."
+    "Each branch that has every line of the session in its copy of `path`."
     if not wanted: return []
     branches = local_branches(repo) if branches is None else branches
     blobs = blobs_at(repo, path, branches)
@@ -150,26 +150,26 @@ def _head_branch(repo):
 
 
 def _refs(repo, cache=None):
-    "The checked-out branch and every local branch, asked for once per `landed` call."
+    "The current branch and every local branch. Read one time for each `landed` call."
     if cache is None: return _head_branch(repo), local_branches(repo)
     if ('refs',) not in cache: cache[('refs',)] = (_head_branch(repo), local_branches(repo))
     return cache[('refs',)]
 
 
 def _wanted(ledger, touches):
-    "Every line hash the session recorded for one path, oldest touch first."
+    "Every line hash that the session recorded for one path."
     return [h for t in touches for h in ((ledger.detail(t.id) or {}).get('lines') or ())]
 
 # %% ../nbs/03_git.ipynb #f426c635
 def _replaced_by(repo, path, after):
-    "The commits on this branch that touched `path` after a session did, newest first."
+    "The commits on this branch that changed `path` after the session, newest first."
     try: rows = repo.history(limit=20, ref='HEAD', path=str(path))
     except Exception: return []
     return [r for r in rows if (r.get('timestamp') or 0) >= after - 1]
 
 
 def _coarse(repo, touch, root, why_extra='', after=None):
-    "The verdict when the machine-local tier is not here to say which lines were written."
+    "The verdict when there is no line record."
     path = touch.path
     after = touch.get('at') or 0 if after is None else after
     later = _replaced_by(repo, path, after)
@@ -197,7 +197,7 @@ def verdict_for(ledger,
                 root=None,      # the repository root, taken from `repo` when absent
                 cache=None,     # a commit-row cache shared across one `landed` call
                 branch=''):     # the branch the session ran on
-    "What became of a session's whole change to one file."
+    "What happened to the full change that a session made to one file."
     if not isinstance(touches, (list, tuple, L)): touches = [touches]
     touches = sorted(touches, key=lambda t: t.get('at') or 0)
     touch, branch = touches[-1], str(branch or '')
@@ -265,13 +265,13 @@ def verdict_for(ledger,
 
 # %% ../nbs/03_git.ipynb #07be1d6e
 def _same_repo(row, root):
-    "Whether a session row was recorded in the repository being asked about."
+    "Whether a session row comes from this repository."
     where = row.get('root') or ''
     return not where or Path(where) == Path(root)
 
 
 def landed(session=None, path='', home=None, start='.', ledger=None):
-    "What became of what was written, as one `Verdict` per file. Answers for the newest session by default."
+    "What happened to the lines that were written. One `Verdict` for each file, for the newest session by default."
     led = ledger or Ledger(home, start)
     root = git_root(led.home.root) or git_root(start)
     if root is None: return L()
@@ -296,7 +296,7 @@ def landed(session=None, path='', home=None, start='.', ledger=None):
 
 
 def report(session=None, path='', home=None, start='.', ledger=None):
-    "The same answers as one row a model can read, plus the counts."
+    "The same answers as one record, with the counts."
     vs = landed(session, path, home, start, ledger)
     counts = {}
     for v in vs: counts[v.state] = counts.get(v.state, 0) + 1
@@ -306,7 +306,7 @@ def report(session=None, path='', home=None, start='.', ledger=None):
 
 # %% ../nbs/03_git.ipynb #1dca0543
 def link_commit(sha='HEAD', home=None, start='.', lookback='7d'):
-    "Record `sha` against every session that recently touched a file in it. Returns those sessions."
+    "Record `sha` for each session that recently changed a file in it. Returns those sessions."
     from panjika.core import Scribe
     led = Ledger(home, start)
     root = git_root(led.home.root) or git_root(start)
@@ -331,7 +331,7 @@ def link_commit(sha='HEAD', home=None, start='.', lookback='7d'):
 
 # %% ../nbs/03_git.ipynb #2539a4ed
 def blend(path, home=None, start='.', ledger=None, limit=60):
-    "The commits and the agent sessions for one file, newest first, on one list."
+    "The commits and the sessions for one file, newest first, in one list."
     led = ledger or Ledger(home, start)
     root = git_root(led.home.root) or git_root(start)
     out = L()

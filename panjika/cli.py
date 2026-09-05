@@ -33,7 +33,7 @@ def tint(text, code, on=None):
 
 
 def ago(at):
-    "How long ago, in the shortest form that is still true."
+    "The time since `at`, in the shortest correct form."
     secs = max(0, time.time() - (at or 0))
     for n, unit in ((86400 * 365, 'y'), (86400 * 30, 'mo'), (86400, 'd'), (3600, 'h'), (60, 'm')):
         if secs >= n: return f'{int(secs // n)}{unit} ago'
@@ -41,7 +41,7 @@ def ago(at):
 
 
 def plain(o):
-    "Anything the ledger holds, as something JSON can carry."
+    "Any value from the ledger, in a form that JSON can hold."
     if isinstance(o, Path): return str(o)
     if isinstance(o, dict): return {str(k): plain(v) for k, v in o.items()}
     if isinstance(o, (list, tuple, set, L)): return [plain(x) for x in o]
@@ -55,7 +55,7 @@ def out_json(obj):
 
 # %% ../nbs/05_cli.ipynb #86ff54a4
 def cmd_log(a):
-    "Sessions, newest first. The log."
+    "Sessions, newest first."
     led = Ledger(a.home, a.root)
     rows = led.sessions(limit=a.limit, harness=a.harness, since=a.since, path=a.path, repo=a.repo)
     if a.json: return out_json([dict(led.session(r.session)) for r in rows])
@@ -73,7 +73,7 @@ def cmd_log(a):
 
 
 def cmd_show(a):
-    "One session, whole."
+    "One session with all its records."
     led = Ledger(a.home, a.root)
     sid = a.session
     if sid in ('', 'latest', None):
@@ -97,7 +97,7 @@ def cmd_show(a):
 
 # %% ../nbs/05_cli.ipynb #ce947719
 def cmd_trail(a):
-    "Every session and every commit that ever touched one file."
+    "Every session and every commit that changed one file."
     rows = blend(a.path, home=a.home, start=a.root, limit=a.limit)
     if a.json: return out_json([dict(r) for r in rows])
     if not rows: return print(f'nothing recorded for {a.path}')
@@ -112,7 +112,7 @@ def cmd_trail(a):
 
 
 def cmd_landed(a):
-    "What became of what a session wrote."
+    "What happened to the lines that a session wrote."
     r = report(a.session, path=a.path, home=a.home, start=a.root)
     if a.json: return out_json({'summary': r.summary, 'counts': r.counts,
                                 'verdicts': [v.dict() for v in r.verdicts]})
@@ -162,7 +162,7 @@ def cmd_stats(a):
 
 
 def cmd_backfill(a):
-    "Read transcripts a harness wrote before there was a ledger."
+    "Read the transcripts that a harness wrote before the ledger existed."
     from .backfill import backfill, backfill_session
     home = None if a.all else Home(a.home, a.root)
     p = Path(a.path).expanduser() if a.path else None
@@ -175,7 +175,7 @@ def cmd_backfill(a):
 
 
 def cmd_export(a):
-    "Every ledger record as JSONL on stdout. The portable form."
+    "Every ledger record as JSONL on stdout."
     led = Ledger(a.home, a.root)
     after = _since(a.since)
     raw = getattr(sys.stdout, 'buffer', None)
@@ -186,7 +186,7 @@ def cmd_export(a):
 
 # %% ../nbs/05_cli.ipynb #07b69348
 def build_parser():
-    "The whole command line."
+    "The command line parser."
     p = argparse.ArgumentParser(prog='panjika', description='the register of agent deeds')
     p.add_argument('--home', default=os.environ.get('PANJIKA_HOME'),
                    help='the ledger folder. Default finds one from --root')

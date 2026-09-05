@@ -2,13 +2,11 @@
 
 > the register of deeds
 
-A panji is the genealogical register a panjikar keeps: who descends from whom, appended and
-never rewritten. This is the same thing for agent work. Every session, every file it touched,
-and where that change ended up in git, in one append-only JSONL ledger that every harness in a
-repository writes to.
+A panjikar keeps a panji: a register of who descends from whom. A panjikar adds to it and never changes it. panjika is the same thing for agent work.
 
-Agent sessions are logged today. What is missing is the join: **which session changed this
-file, in what context, and did the change survive.** That is what this answers.
+Each repository has one ledger. It is a JSONL file. It holds each session, each file that the session changed, and the place that the change went to in git. Each harness in the repository writes to the same ledger.
+
+Your harness already logs its sessions. It does not tell you which session changed a file, or if the change is still there. panjika answers those two questions.
 
 ## The two questions
 
@@ -17,97 +15,83 @@ $ panjika trail charges.py
 cf02cc5  commit  no rounding: amounts are already in cents
           Sam  2h ago
 rb-0c7e  ramabana  total() should round to 2dp
-          +1/-1  sonnet  2h ago
+          +1/-1  sonnet  main  2h ago
 8131d52  commit  skip negative amounts in total()
           Sam  1d ago
 cc-4f21  claude-code  total() blows up on refunds. Make it skip negative amounts.
-          +1/-1  opus-5  1d ago
+          +1/-1  opus-5  main  1d ago
 b5a1608  commit  the billing module
           Sam  3d ago
 ```
 
-Three harnesses, one file, one timeline. Then the question an agent should ask before it plans
-anything:
+Three harnesses, one file, one list. Now ask what happened to one session:
 
 ```
 $ panjika landed rb-0c7e
-replaced  charges.py  0/1 lines
+replaced  charges.py  0/1 lines  on main
     none of the 1 lines this session wrote are in the file;
     cf02cc5 'no rounding: amounts are already in cents' by Sam owns it now
 
 1 replaced
 ```
 
-The rounding change did not survive, and the commit message says why. An agent about to make
-that change again now knows not to.
+The rounding change is gone. The commit message gives the reason. An agent that wants to make the same change reads this and stops.
 
 ## Install
 
 ```sh
 pip install panjika
-panjika install     # Claude Code and Codex hooks, a git post-commit hook, the skill, the ledger
-panjika backfill    # and everything that already happened, out of the transcripts
+panjika install     # the hooks, the git hook, the skill, and the ledger
+panjika backfill    # the sessions that ran before you installed panjika
 ```
 
-`panjika install` writes `.claude/settings.json`, `.codex/hooks.json` and
-`.git/hooks/post-commit`. Codex will not run a hook until you have reviewed it with `/hooks`.
+`panjika install` writes three files: `.claude/settings.json`, `.codex/hooks.json` and `.git/hooks/post-commit`. Codex does not run a hook until you review it with `/hooks`.
 
-It also writes `SKILL.md` into `.claude/skills/panjika/`, `.agents/skills/panjika/` and
-`.codex/skills/panjika/`, which `--no-skill` turns off. One file ships inside the package and
-every copy comes from it.
-`[project.entry-points.pyskills]` publishes the same text to a harness that reads skills from
-installed packages rather than from disk.
+It also writes `SKILL.md` into `.claude/skills/panjika/`, `.agents/skills/panjika/` and `.codex/skills/panjika/`. Use `--no-skill` to stop this. There is one `SKILL.md` in the package, and each copy comes from it. `[project.entry-points.pyskills]` publishes the same text, for a harness that reads skills from packages.
 
 ## What `landed` says
 
-| state | what it means | what to do about it |
+| state | what it means | what to do |
 |---|---|---|
-| `landed` | every line is in a commit | nothing; it is done |
-| `partly_landed` | some lines are committed, some are gone or still uncommitted | read `why`; it counts them |
-| `pending` | the lines are in the working tree, nothing is committed | commit, or say why not |
-| `replaced` | none of the lines survive; `why` names the commit and the author | read that commit before redoing the work |
-| `gone` | the file is not in the working tree | check whether it moved |
-| `untracked` | git is not tracking the file | `git add` it, or it will never land |
-| `uncertain` | commits touched the file since, but no line record is here to say whether this change is in them | read those commits, or run where the session ran |
-| `unknown` | nothing to go on | no line record and no commit since |
+| `landed` | each line is in a commit | nothing |
+| `partly_landed` | some lines are in a commit, and some are gone or not committed | read `why`. It counts them |
+| `pending` | the lines are in the working tree, and nothing is committed | commit them, or give the reason |
+| `replaced` | no line is in the file. `why` gives the commit and the author | read that commit before you do the work again |
+| `gone` | the file is not in the working tree | check if a person moved it |
+| `untracked` | git does not track the file | run `git add`, or the change cannot go into git |
+| `uncertain` | a commit changed the file after the session, but there is no line record | read those commits, or run panjika where the session ran |
+| `unknown` | there is no line record and no later commit | nothing to read |
+
+`evidence` says how accurate the answer is.
+
+`lines` means panjika compared the lines of the session with `git blame`. This answer stays correct if a person formats the file again, or moves the lines. It also stays correct if the lines go into git with another change.
+
+`path` means panjika only knows that a commit changed the file. That commit can be a revert, or it can hold the change. panjika cannot know which. Thus `path` gives `uncertain` and never `landed`.
 
 ## Which branch
 
-A verdict is about one working tree. A change made on a feature branch reads as `replaced` from
-`main`, and reads correctly from the branch itself.
+A verdict is about one working tree. A change made on a feature branch reads `replaced` from `main`. It reads correctly from the feature branch.
 
-`branch` is the branch the session ran on. `branch_gone` says that branch is now deleted.
-`elsewhere` names the branches whose committed copy of the file still holds every line, and is
-filled in for a `replaced` or `gone` verdict that has a line record. The verdict reads the
-working tree and `elsewhere` reads what each branch has committed, so the branch you are
-standing on counts: a change committed on `main` and then reverted in the working tree is
-`replaced` and still on `main`.
+- `branch` is the branch that the session ran on.
+- `branch_gone` says that a person deleted that branch.
+- `elsewhere` gives each branch that has every line of the session in its copy of the file. panjika fills it in for a `replaced` or `gone` verdict.
+- `anywhere` is true for `landed`, `partly_landed` and `pending`, and for any branch in `elsewhere`. It is false for `uncertain`, `unknown` and `untracked`, because panjika cannot find the lines. Read it as "panjika can point to these lines". It is not proof that the lines are gone.
 
-`anywhere` is true for `landed`, `partly_landed` and `pending`, and for anything `elsewhere`
-found. It is false for `uncertain`, `unknown` and `untracked` as well, because none of those
-knows where the lines are. Read it as "panjika can point at these lines", not as proof they are
-gone.
+The verdict reads the working tree. `elsewhere` reads what each branch has in git, and it includes the current branch. Thus a change can be in git on `main`, and a person can revert it in the working tree. Then the state is `replaced` and `elsewhere` gives `main`.
 
 ```
-$ panjika landed rb-0c7e            # standing on main
+$ panjika landed rb-0c7e            # on main
 replaced  charges.py  0/1 lines  on feature
     none of the 1 lines this session wrote are in the file; still on feature
 
 $ git branch -D feature
 $ panjika landed rb-0c7e
 replaced  charges.py  0/1 lines  on feature
-    none of the 1 lines this session wrote are in the file; and on no other branch either;
-    the branch feature it ran on is gone
+    none of the 1 lines this session wrote are in the file; on no branch in this
+    repository; the branch feature it ran on is gone
 ```
 
-`elsewhere` is answered by hashing each branch's copy of the file and matching the recorded
-lines, so it needs no checkout and no blame.
-
-`evidence` says how sure the verdict is. `lines` matched the exact lines the session wrote
-against `git blame`, which survives the file being reformatted, moved around, or committed
-together with somebody else's change. `path` only knows that some commit touched the file
-afterwards, which is as consistent with the change being reverted as with it surviving, so on
-`path` evidence alone the answer is `uncertain` and never `landed`.
+panjika hashes the copy of the file on each branch and compares the recorded lines. It does not change the working tree and it does not use `git blame`.
 
 ## From Python
 
@@ -117,129 +101,108 @@ from panjika import landed, trail, log, session
 for v in landed():                  # the newest session in this repository
     print(v.state, v.path, v.why)
 
-trail('src/charges.py')             # sessions and commits on one timeline
-log(limit=10, harness='codex')      # what codex has been doing here
-session('latest').files             # what the last session changed
+trail('src/charges.py')             # the sessions and the commits for one file
+log(limit=10, harness='codex')      # what codex did here
+session('latest').files             # the files that the last session changed
 ```
 
-`landed()` returns `Verdict` objects carrying `state`, `why`, `kept`, `total`, `survived`,
-`evidence`, `commits`, `branch`, `branch_gone`, `elsewhere` and `anywhere`. Every command takes
-`--json` for the same answers as records.
+`landed()` gives `Verdict` objects. Each one has `state`, `why`, `kept`, `total`, `survived`, `evidence`, `commits`, `branch`, `branch_gone`, `elsewhere` and `anywhere`. Each command has a `--json` option that gives the same answers as records.
 
 ## How it is stored
 
-JSONL, read and written with `orjson`, in `.panjika/` at the repository root. Two tiers:
+panjika reads and writes JSONL with `orjson`, in `.panjika/` at the repository root. There are two tiers:
 
 ```
 .panjika/
   ledger/2026-09.jsonl    committed. sessions, steps, touches, commits
-  detail/2026-09.jsonl    gitignored. whole tool arguments, whole outputs, changed-line hashes
+  detail/2026-09.jsonl    gitignored. full tool arguments, full outputs, line hashes
   .gitattributes          ledger/*.jsonl merge=union
   .gitignore              detail/
 ```
 
-The ledger tier is small, carries no source, and is meant to be committed, so a trail travels
-with the repository. Three things make that work:
+The `ledger` tier is small and it holds no source code. You commit it, so the trail goes with the repository. Three things make this work.
 
-- **One record is one `write` syscall** to a file opened `O_APPEND`, so two harnesses writing at
-  the same moment never interleave inside a line.
-- **`merge=union`**, so two branches that both appended merge to the union of their lines rather
-  than to a conflict. Every record carries an `id` and readers deduplicate, which is what makes
-  taking both sides safe. `00_core.ipynb` merges two real branches and checks it.
-- **Nothing is ever rewritten.** A session is not one record; it is every record that named it,
-  folded in time order. That is why a hook can append the start of a session, a dozen tool calls
-  later, and the end, from three processes, with no lock between them.
+- **One record is one `write`** to a file that is open with `O_APPEND`. Thus two harnesses cannot mix their records in one line.
+- **`merge=union`.** Two branches can both add records to the same file. The merge keeps the records from both branches. Each record has an `id`, and a reader removes a duplicate. `00_core.ipynb` merges two real branches and tests this.
+- **panjika never changes a record.** A session is not one record. It is each record with the same session id, in time order. Thus a hook can add the start of a session, then a dozen tool calls, then the end, from three processes, with no lock.
 
-The detail tier is machine-local. It holds the hashes of the lines each change added, which is
-what makes `landed` exact. Without it the answers degrade to path-level evidence and say so.
+The `detail` tier stays on your machine. It holds the hashes of the lines that each change added, and `landed` needs them. Without them, the answers use path evidence and say so.
 
-## Sessions from before there was a ledger
+## Sessions from before the ledger
 
-Hooks only see what happens next, so on the day it is installed a ledger knows nothing. The
-harness has already written the transcripts, and `panjika backfill` reads them:
+A hook only sees the next event. On the day you install panjika, the ledger is empty. Your harness has already written its transcripts, and `panjika backfill` reads them:
 
 ```sh
 panjika backfill                    # this project
-panjika backfill --all              # every project on this machine
+panjika backfill --all              # each project on this machine
 panjika backfill path/to/one.jsonl  # one transcript
 ```
 
-Claude Code keeps one JSONL per session under `~/.claude/projects/<slug>/` and one file per
-subagent beside it. Each subagent becomes its own session under its parent, keeping the
-description it was spawned with.
+Claude Code writes one JSONL for each session under `~/.claude/projects/<slug>/`, and one file for each subagent next to it. Each subagent becomes its own session under its parent. It keeps the description that started it.
 
-An `Edit` reports the file before and after, so a backfilled touch carries the same line
-hashes a hook would have written and `landed` is exact for it. A `Bash` command reports
-neither, so its write targets are read off the command line and the touch carries a path and
-no lines: precise about which file, honest that the body is not known.
+An `Edit` gives the file before and after. Thus a backfilled touch has the same line hashes as a hook, and `landed` is accurate for it. A `Bash` command gives neither. panjika reads its write targets from the command line, so the touch has a path and no lines. panjika knows the file, and it does not know the content.
 
-Three things a naive reader of those files gets wrong, each found in a real transcript. Claude
-Code splits one API response across several records and repeats the identical `usage` in each,
-so summing per record roughly doubles the count. A live transcript's last line is regularly
-half written. And a tool call before the first prompt belongs to no prompt in the file, so
-filing it under a later one blames a request that did not cause it.
+Three things in these files are easy to read wrong. panjika handles each one.
+
+- Claude Code writes one API response as several records, and it repeats the same `usage` in each. If you add them, the total is about two times too large.
+- The last line of a live transcript is often incomplete.
+- A tool call before the first prompt has no prompt. If you file it under a later prompt, you name a request that did not cause it.
 
 ## Harnesses
 
 | harness | how | verified |
 |---|---|---|
 | Claude Code | `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`, `SessionEnd` hooks | yes, against the documented payloads |
-| Ramabana | hand over the turn record `Agent._remember` already builds | yes |
-| git | a `post-commit` hook links each commit to the sessions that touched its files | yes |
+| Ramabana | give the turn record that `Agent._remember` makes | yes |
+| git | a `post-commit` hook links each commit to the sessions that changed its files | yes |
 | Codex | `SessionStart`, `UserPromptSubmit`, `PostToolUse`, `SubagentStart`, `SubagentStop`, `SessionEnd` hooks | yes, against the documented payloads |
-| anything else | `panjika record '{"session":"...","do":"step","tool":"make"}'` | yes |
+| any other | `panjika record '{"session":"...","do":"step","tool":"make"}'` | yes |
 
-Ramabana assembles the whole of a turn in one record before writing it to its own log: the
-prompt, the reply, the model, the usage, and every tool call with its arguments and its result.
-The adapter takes that record whole, so wiring it up is three lines at the end of
-`Agent._remember`:
+### Ramabana
+
+Ramabana makes one record for a full turn before it writes to its own log. The record has the prompt, the reply, the model and the usage. It also has each tool call, with its arguments and its result. The adapter takes that record, so you need three lines at the end of `Agent._remember`:
 
 ```python
 from panjika.harness import ingest
 try: ingest({'session': self.session_id, 'cwd': str(self.host.roots[0]), **turn}, 'ramabana')
-except Exception: pass      # a ledger that fails must never take a turn down with it
+except Exception: pass      # a ledger must never stop a turn
 ```
 
-Codex uses Claude Code's event vocabulary, delivered the same way, so its adapter reads much
-the same. Three things differ and each is handled: there is no separate failure event, so an
-error is read out of `tool_response`; the editor is `apply_patch`, which names the files it
-touches inside the patch envelope rather than in an argument; and a subagent reports its
-parent's `session_id` beside its own `agent_id`. `panjika install` writes
-`<repo>/.codex/hooks.json`, and Codex will not run a hook until you have reviewed it with
-`/hooks`.
+### Codex
 
-A Codex old enough to lack lifecycle hooks has only `notify`, which fires once per completed
-turn and never per tool call. Its keys are kebab-case, unlike every other Codex surface, and
-Codex passes the payload as a command-line argument with stdin closed, so it is reached
-through `record` rather than `hook`:
+Codex uses the event names of Claude Code and the same delivery. Three things are different, and panjika handles each one.
+
+- Codex has no failure event. panjika reads the error from `tool_response`.
+- The editor is `apply_patch`. It gives the file names inside the patch.
+- A subagent sends the `session_id` of its parent and its own `agent_id`.
+
+`panjika install` writes `<repo>/.codex/hooks.json`. Codex does not run a hook until you review it with `/hooks`.
+
+An old Codex has no lifecycle hooks. It has only `notify`, which runs one time for each turn and never for a tool call. Its keys use kebab-case. Codex sends the payload as an argument and closes stdin. Thus you use `record`, not `hook`:
 
 ```toml
 # ~/.codex/config.toml
 notify = ["panjika", "record", "--adapter", "codex-notify"]
 ```
 
-That route records turns and no tool calls, so `landed` has nothing to work from. Prefer
-hooks wherever they exist.
+This route records turns and no tool calls, so `landed` has nothing to compare. Use hooks if your Codex has them.
 
-Adding a harness is a function that turns its payload into a list of calls, and a line in
-`ADAPTERS`. Adapters write nothing, so testing one needs no disk.
+### Any other harness
+
+Write a function that changes the payload into a list of calls, and add a line to `ADAPTERS`. An adapter writes nothing to the disk, so you can test it without a disk.
 
 ## Develop
 
-nbdev. The notebooks under `nbs/` are the source and `panjika/*.py` is generated.
+nbdev. The notebooks in `nbs/` are the source. panjika generates `panjika/*.py`.
 
 ```sh
 uv sync --group dev
 uv run nbdev-export      # notebooks -> panjika/*.py
-uv run nbdev-test        # execute every notebook, which is the whole suite
-uv run nbdev-clean       # before committing
+uv run nbdev-test        # run each notebook. This is the whole test suite
+uv run nbdev-clean       # before you commit
 ```
 
-The tests are cells in the notebooks, and they double as the documentation. Each drives a
-real repository rather than a stub. `03_git.ipynb` walks one file through every verdict
-state and every branch case. `00_core.ipynb` holds the record, the writer and the reader,
-and merges two branches that both appended. `06_backfill.ipynb` imports a transcript and
-asks `landed` about it.
+The tests are cells in the notebooks, and they are also the documentation. Each one uses a real repository. `03_git.ipynb` takes one file through each verdict state and each branch case. `00_core.ipynb` holds the record, the writer and the reader, and merges two branches. `06_backfill.ipynb` imports a transcript and asks `landed` about it.
 
 ## License
 

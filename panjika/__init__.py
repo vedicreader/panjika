@@ -12,13 +12,13 @@ from panjika.git import Verdict, blend as trail, landed, link_commit, report
 
 
 def log(limit=20, harness='', since='', path='', repo='', home=None, start='.'):
-    "Sessions, newest first. The same rows `panjika log` prints."
+    "Sessions, newest first. The same rows as `panjika log`."
     return Ledger(home, start).sessions(limit=limit, harness=harness, since=since,
                                         path=path, repo=repo)
 
 
 def session(sid='latest', home=None, start='.'):
-    "One session with everything recorded against it. `latest` is the newest."
+    "One session with all its records. `latest` is the newest session."
     led = Ledger(home, start)
     if sid in ('latest', '', None):
         rows = led.sessions(limit=1)
@@ -28,7 +28,7 @@ def session(sid='latest', home=None, start='.'):
 
 
 def record(session='', home=None, start='.', **fields):
-    "Record one act against a session. The generic adapter, called in process."
+    "Record one act for a session, through the generic adapter."
     from panjika.harness import ingest
     return ingest({'session': session, 'cwd': str(start), **fields}, 'generic', home, start)
 

@@ -1,4 +1,4 @@
-"""getting the record out of whichever agent is running
+"""how to get a record out of each agent
 
 Docs: https://vedicreader.github.io/panjika/harness.html.md"""
 
@@ -47,7 +47,7 @@ TARGET_KEYS = ('command', 'url', 'pattern', 'query', 'prompt', 'description', 'c
 
 
 def tool_target(args):
-    "The one thing a tool call was pointed at: a path, else a command, a url, a pattern."
+    "The target of a tool call: a path, a command, a url, or a pattern."
     return str(first_of(args, *PATH_KEYS, *TARGET_KEYS))
 
 
@@ -57,7 +57,7 @@ def tool_path(args):
 
 # %% ../nbs/04_harness.ipynb #d66caa75
 def claude_code(payload):
-    "One Claude Code hook payload as a plan. See the hooks reference for the field names."
+    "One Claude Code hook payload as a plan."
     p = payload or {}
     event = str(p.get('hook_event_name') or '')
     out = plan(p.get('session_id'), p.get('cwd'))
@@ -95,7 +95,7 @@ def patch_paths(text):
 
 
 def codex_paths(tool, args):
-    "The files one Codex tool call moved."
+    "The files that one Codex tool call changed."
     if tool in CODEX_EDITS:
         body = first_of(args, 'command', 'input', 'patch', 'content')
         if (found := patch_paths(body)): return found
@@ -104,7 +104,7 @@ def codex_paths(tool, args):
 
 
 def _codex_failed(response):
-    "Whether a `tool_response` reports an error. Codex has no separate failure event."
+    "Whether a `tool_response` has an error."
     if isinstance(response, dict):
         return bool(response.get('isError') or response.get('is_error') or response.get('error'))
     return False
@@ -184,14 +184,14 @@ def _act_target(a): return tool_target(a.get('args') or {}) or str(a.get('summar
 
 
 def _act_path(a):
-    "The file a Ramabana act names, when the tool it ran was one that writes."
+    "The file that a Ramabana act names, if its tool writes."
     path = tool_path(a.get('args') or {})
     return path if path and action_for(a.get('tool') or '') == 'write' else ''
 
 
 # %% ../nbs/04_harness.ipynb #d176cda8
 def generic(payload):
-    "A payload that already speaks the ledger's own shape, as one act or a list under `acts`."
+    "A payload in the shape of the ledger: one act, or a list under `acts`."
     p = dict(payload or {})
     out = plan(first_of(p, 'session', 'session_id'), first_of(p, 'cwd', 'start'))
     acts = p.get('acts')
@@ -232,7 +232,7 @@ def ingest(payload, adapter='generic', home=None, start='.', harness=''):
 
 
 def hook(adapter='generic', stream=None, home=None, start=None):
-    "Read one payload from `stream` and record it. Never raises; failures go to stderr."
+    "Read one payload from `stream` and record it. It raises no error, and writes each error to stderr."
     try:
         raw = (stream or sys.stdin).read()
         payload = json.loads(raw) if raw.strip() else {}
@@ -304,7 +304,7 @@ SKILL_DIRS = ('.claude/skills/panjika', '.agents/skills/panjika', '.codex/skills
 
 
 def skill_md():
-    "The packaged `SKILL.md`, frontmatter and all."
+    "The `SKILL.md` in the package, with its frontmatter."
     return (files('panjika')/'SKILL.md').read_text(encoding='utf-8')
 
 
@@ -324,14 +324,14 @@ def frontmatter(text):
 
 
 def skill_body(text=None):
-    "A skill document as a pyskill body: its description first, then the prose."
+    "A skill document as a pyskill body. The description is first, then the text."
     meta, body = frontmatter(skill_md() if text is None else text)
     desc = ' '.join((meta.get('description') or '').split())
     return f'{desc}\n\n{body}' if desc else body
 
 
 def write_skill(root='.', dirs=SKILL_DIRS):
-    "Write the packaged skill into each agent's skill folder under `root`. Returns the paths."
+    "Write the packaged skill into the skill folder of each agent under `root`. Returns the paths."
     body, out = skill_md(), L()
     for d in dirs:
         p = Path(root)/d/'SKILL.md'
@@ -342,7 +342,7 @@ def write_skill(root='.', dirs=SKILL_DIRS):
 
 # %% ../nbs/04_harness.ipynb #81145f9a
 def install(root='.', claude_code=True, git=True, codex=True, skill=True, home=None):
-    "Write the hook configuration and the skill into `root`. Returns what was written and what was not."
+    "Write the hooks and the skill into `root`. Returns what it wrote and what it did not write."
     root = Path(root)
     out, ledger = AttrDict(wrote=L(), skipped=L(), codex=CODEX_SNIPPET,
                            note=CODEX_TRUST), Home(home, root)

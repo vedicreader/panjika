@@ -1,4 +1,4 @@
-"""sessions that ran before there was a ledger
+"""sessions that ran before the ledger existed
 
 Docs: https://vedicreader.github.io/panjika/backfill.html.md"""
 
@@ -30,7 +30,7 @@ def sess_dir(cwd=None, root=None):
     return SESSIONS/re.sub(r'[^a-zA-Z0-9]', '-', str(Path(cwd or '.').expanduser().resolve()))
 
 def read_recs(path):
-    "Records from a transcript, dropping a trailing line that is still being written."
+    "Every record in a transcript. It ignores an incomplete last line."
     out = L()
     try: raw = Path(path).read_text(encoding='utf-8', errors='replace')
     except OSError: return out
@@ -41,7 +41,7 @@ def read_recs(path):
     return out
 
 def at_of(rec):
-    "A record's epoch seconds. Claude Code writes ISO-8601 with a Z."
+    "The time of a record, in epoch seconds."
     t = (rec or {}).get('timestamp')
     if not t: return None
     try: return datetime.fromisoformat(str(t).replace('Z', '+00:00')).timestamp()
@@ -52,11 +52,11 @@ INJECTED = ('<task-notification', '<system-reminder', '<wake ', '<local-command'
             '<command-name', '<user-prompt-submit-hook')
 
 def is_prompt(rec):
-    "A record that drove a turn: its message content is text rather than tool results."
+    "Whether a record is a prompt. Its message content is text, not a tool result."
     return rec.get('type') == 'user' and isinstance((rec.get('message') or {}).get('content'), str)
 
 def prompt_kind(rec, text):
-    "Whether a person typed this or the harness injected it. They are not otherwise tellable apart."
+    "Whether a person typed the text, or the harness added it."
     kind = (rec.get('origin') or {}).get('kind') if isinstance(rec.get('origin'), dict) else None
     if kind and kind != 'human': return 'injected'
     return 'injected' if str(text).lstrip().startswith(INJECTED) else 'human'
@@ -89,7 +89,7 @@ _SEPS = ('|', '||', '&&', ';', '&')
 _REDIR = ('>', '>>', '2>', '2>>', '&>', '&>>')
 
 def _cmd_lines(cmd):
-    "Command lines with heredoc bodies removed: a body is data, not shell syntax."
+    "The lines of a shell command, without the heredoc bodies."
     out, lines, i = [], cmd.splitlines(), 0
     while i < len(lines):
         out.append(lines[i])
@@ -100,7 +100,7 @@ def _cmd_lines(cmd):
     return out
 
 def _segments(line):
-    "One line split at the shell operators, so a redirect belongs to the command it follows."
+    "One line, split at each shell operator."
     try: toks = shlex.split(line, comments=True)
     except ValueError: return []
     segs, cur = [], []
@@ -110,13 +110,13 @@ def _segments(line):
     return [s for s in segs + [cur] if s]
 
 def _named(p):
-    "One candidate path, or None when it is not one this code can name."
+    "One path, or `None` if panjika cannot name it."
     p = p.strip().strip('"').strip("'").rstrip(';&|')
     if not p or p in ('+', ';', '{}') or p.startswith(('-', '/dev/')): return None
     return None if any(c in p for c in UNRESOLVED) or p.isdigit() else p
 
 def bash_paths(cmd):
-    "Write targets a shell command obviously has. Conservative: a miss beats a guess."
+    "The files that a shell command writes to. It ignores a path that it cannot name."
     if not cmd: return []
     out = []
     for line in _cmd_lines(cmd):
@@ -138,7 +138,7 @@ def bash_paths(cmd):
     return seen
 
 def call_touches(tool, args, result=None):
-    "`[(path, action)]` for one call. Empty when the tool moved no file this code can name."
+    "`[(path, action)]` for one call. Empty if the call changed no file that panjika can name."
     args, out = args or {}, []
     if tool in TOOL_PATHS:
         key, action = TOOL_PATHS[tool]
@@ -151,7 +151,7 @@ def call_touches(tool, args, result=None):
     return out
 
 def bodies(tool, args, result):
-    "The before and after bodies of a write, when the transcript actually carries them."
+    "The file before and after a write, if the transcript has them."
     args, result = args or {}, result if isinstance(result, dict) else {}
     before, after = result.get('originalFile'), result.get('newFile')
     if after is None and tool == 'Write': after = args.get('content')
@@ -159,7 +159,7 @@ def bodies(tool, args, result):
 
 # %% ../nbs/06_backfill.ipynb #a57f7a5d
 def usage_of(recs):
-    "Tokens over assistant records, counting each API response once however it was split."
+    "The tokens in the assistant records. It counts each API response one time."
     seen, tot = set(), dict(input=0, output=0, cache=0)
     for r in recs:
         if r.get('type') != 'assistant': continue
@@ -174,7 +174,7 @@ def usage_of(recs):
     return tot
 
 def rec_id(*parts):
-    "A record id derived from the transcript, so re-reading it writes the same record."
+    "An id made from the transcript. A second read makes the same id."
     return 'b' + hashed('\x1f'.join(str(p) for p in parts), 22)
 
 
@@ -227,7 +227,7 @@ def _has_tool(m):
     return any(isinstance(b, dict) and b.get('type') == 'tool_use' for b in blocks(m))
 
 def _call_acts(p, rec, msg, results, sid=''):
-    "One record's tool calls, with their results and whatever files they moved."
+    "The tool calls in one record, with their results and the files they changed."
     for b in blocks(msg):
         if not isinstance(b, dict) or b.get('type') != 'tool_use': continue
         res, rrec = results.get(b.get('id'), (None, None))

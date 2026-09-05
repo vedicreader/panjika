@@ -1,4 +1,4 @@
-"""a record, the file it is written to, and how it reads back
+"""a record, the file that holds it, and how to read it
 
 Docs: https://vedicreader.github.io/panjika/core.html.md"""
 
@@ -43,7 +43,7 @@ def now(): return round(time.time(), 3)
 
 
 def new_id(prefix=''):
-    "A short unique id. Records carry one so a union merge can be deduplicated."
+    "A short unique id. Each record has one, so a reader can remove a duplicate."
     return f'{prefix}{uuid.uuid4().hex[:12]}'
 
 
@@ -69,7 +69,7 @@ def git_root(start='.'):
 
 
 def find_home(start='.'):
-    "The ledger folder for `start`: an existing one above it, else its repository, else `~`."
+    "The ledger folder for `start`. It uses an existing ledger, else the repository root, else `~`."
     here = Path(start).resolve()
     for d in (here, *here.parents):
         if (d/DIR).is_dir(): return d/DIR
@@ -87,7 +87,7 @@ detail/
 
 
 class Home:
-    "One ledger folder, and the shards inside it."
+    "One ledger folder and the files in it."
 
     def __init__(self, path=None, start='.'):
         self.path = Path(path) if path else find_home(start)
@@ -99,7 +99,7 @@ class Home:
     def dir(self, tier): return self.path/tier
 
     def shard(self, tier=LEDGER, at=None):
-        "The file a record written at `at` belongs in."
+        "The file for a record with the time `at`."
         stamp = time.strftime('%Y-%m', time.localtime(at if at else now()))
         return self.dir(tier)/f'{stamp}.jsonl'
 
@@ -112,7 +112,7 @@ class Home:
     def exists(self): return self.path.is_dir()
 
     def init(self):
-        "Make the folder and the two dotfiles that let the ledger tier be committed. Idempotent."
+        "Make the folder and the two dotfiles. You can run this again safely."
         for tier in (LEDGER, DETAIL): self.dir(tier).mkdir(parents=True, exist_ok=True)
         (self.path/'.gitattributes').write_text(GITATTRIBUTES)
         (self.path/'.gitignore').write_text(GITIGNORE)
@@ -120,7 +120,7 @@ class Home:
 
 # %% ../nbs/00_core.ipynb #2d9ce6c1
 def clip(rec, limit):
-    "Shorten a record until its line fits, longest string field first."
+    "Make a record shorter until its line fits. The longest text field is shortened first."
     line = dumps(rec)
     if len(line) <= limit: return rec, len(line)
     rec = dict(rec)
@@ -157,7 +157,7 @@ def read_shard(path):
 
 
 def records(home, tier=LEDGER):
-    "Every record in a tier, oldest first, deduplicated by id."
+    "Every record in a tier, oldest first. Duplicate ids are removed."
     seen, out = set(), L()
     for shard in home.shards(tier):
         for rec in read_shard(shard):
@@ -168,7 +168,7 @@ def records(home, tier=LEDGER):
 
 # %% ../nbs/00_core.ipynb #b17a3aa6
 def fold(recs, key='session', first=()):
-    "Merge records sharing `key` into one row each, later values winning and `first` fields keeping their earliest."
+    "Merge the records with the same `key` into one row. A later value wins. A field in `first` keeps its earliest value."
     out, held = {}, {}
     for rec in recs:
         k = rec.get(key)
@@ -197,7 +197,7 @@ ACTIONS = ('write', 'run', 'net', 'search', 'read', 'plan', 'ask', 'other')
 
 
 def action_for(tool):
-    "Which of `ACTIONS` a tool name means. `other` when nothing matches."
+    "The action in `ACTIONS` for a tool name. `other` if nothing matches."
     name = str(tool or '').lower()
     for action, hints in ACTION_HINTS:
         if any(h in name for h in hints): return action
@@ -205,12 +205,12 @@ def action_for(tool):
 
 # %% ../nbs/00_core.ipynb #b4122dcc
 def _target(value, n=160):
-    "The one-line target of a step: a path, a command, a url, whatever it was pointed at."
+    "The target of a step: a path, a command, a url, or a pattern."
     return ' '.join(str(value or '').split())[:n]
 
 
 class Scribe:
-    "Appends to one ledger."
+    "Adds records to one ledger."
 
     def __init__(self,
                  home=None,         # the ledger folder. None finds one from `start`
@@ -225,7 +225,7 @@ class Scribe:
     def __repr__(self): return f'Scribe({self.session} -> {self.home.path})'
 
     def write(self, kind, detail=None, **fields):
-        "Append one record. `detail` goes to the machine-local tier under the same id."
+        "Add one record. `detail` goes to the `detail` tier with the same id."
         rec = {'kind': kind, 'id': fields.pop('id', None) or new_id(),
                'at': fields.pop('at', None) or now(),
                'session': fields.pop('session', None) or self.session, **fields}
@@ -239,7 +239,7 @@ class Scribe:
 
 # %% ../nbs/00_core.ipynb #32f91910
 def repo_facts(start='.'):
-    "The repository name, root and current branch for `start`, as far as they can be told."
+    "The name, root and current branch of the repository at `start`."
     root = git_root(start)
     branch = ''
     if root is not None:
@@ -262,7 +262,7 @@ def begin(self:Scribe, harness, model='', prompt='', title='', parent='', agent=
 
 @patch
 def end(self:Scribe, status='done', **fields):
-    "Record that a session finished, with whatever counters the harness can supply."
+    "Record that a session finished."
     return self.write('session', status=str(status),
                       ended=fields.pop('ended', None) or fields.get('at') or now(), **fields)
 
@@ -284,12 +284,12 @@ def step(self:Scribe, tool, target='', ok=True, secs=0.0, action='', summary='',
 
 @patch
 def note(self:Scribe, text, **fields):
-    "Record a line of prose against the session: a plan, a summary, a reason."
+    "Record one line of text for a session."
     return self.write('note', text=str(text)[:4000], **fields).id
 
 # %% ../nbs/00_core.ipynb #4afcdb4e
 def text_changes(before, after):
-    "The lines `after` adds to `before` and the ones it drops, for a change git cannot be asked about."
+    "The lines that `after` adds to `before`, and the lines that it removes."
     import difflib
     b, a = (before or '').splitlines(), (after or '').splitlines()
     add, rem = [], []
@@ -310,7 +310,7 @@ def diff_lines(diff):
 
 
 def body_lines(path):
-    "Every line of a file, for a change git will not diff because it is not tracking it."
+    "Every line of a file. Used when git does not track the file."
     try: return Path(path).read_text(encoding='utf-8', errors='replace').splitlines()
     except OSError: return []
 
@@ -329,7 +329,7 @@ def touch(self:Scribe,
           before=None,        # the body before the change, for a backfill
           after_text=None,    # the body after it, for a backfill
           **fields):
-    "Record that a file was touched, and how it now differs from `HEAD`."
+    "Record that a session changed a file, and how the file differs from `HEAD`."
     p = Path(path)
     root = git_root(p if p.is_absolute() else self.start)
     rel = str(p.resolve().relative_to(root)) if root and p.is_absolute() else str(path)
@@ -363,7 +363,7 @@ def commit(self:Scribe, sha, subject='', author='', files=(), branch='', **field
 
 # %% ../nbs/00_core.ipynb #ac665163
 def shard_stamp(home, tier=LEDGER):
-    "What changes when a shard does. The cache key."
+    "The cache key for one tier. It changes when a file changes."
     out = []
     for p in home.shards(tier):
         try: st = p.stat()
@@ -373,7 +373,7 @@ def shard_stamp(home, tier=LEDGER):
 
 
 class Ledger:
-    "One ledger, read. Rereads a tier when a shard on disk has changed."
+    "Reads one ledger. It reads a tier again when a file on the disk changes."
 
     def __init__(self, home=None, start='.'):
         self.home = home if isinstance(home, Home) else Home(home, start)
@@ -400,18 +400,18 @@ OPENING = ('prompt', 'started')
 
 
 def asks(recs, sid):
-    "Every prompt put to one session, in order, each with where it came from."
+    "Every prompt for one session, in order, with its origin."
     return [(r.prompt, r.get('origin') or 'human') for r in recs
             if r.get('session') == sid and r.get('prompt')]
 
 
 def headline(asked):
-    "What a session was for: the first thing a person asked it."
+    "The first prompt from a person. It describes the session."
     return next((p for p, o in asked if o != 'injected'), asked[0][0] if asked else '')
 
 
 def counters(steps):
-    "What a session's steps add up to: how many worked, how many did not, and which tools."
+    "The totals for the steps of a session."
     ok = sum(1 for s in steps if s.get('ok', True))
     tools, actions = {}, {}
     for s in steps:
@@ -436,7 +436,7 @@ def _since(value):
 # %% ../nbs/00_core.ipynb #e4b7d3fe
 @patch
 def sessions(self:Ledger, limit=20, harness='', since='', repo='', path='', status=''):
-    "Session rows, newest first. Every filter is optional and they compose."
+    "Session rows, newest first. Each filter is optional."
     recs = self.of('session')
     rows = fold(recs, first=OPENING)
     for r in rows:
@@ -453,14 +453,14 @@ def sessions(self:Ledger, limit=20, harness='', since='', repo='', path='', stat
 
 @patch
 def sessions_touching(self:Ledger, path):
-    "The ids of every session that touched `path`."
+    "The id of each session that changed `path`."
     p = str(path)
     return {r.session for r in self.of('touch') if r.get('path') == p}
 
 # %% ../nbs/00_core.ipynb #ba3ee683
 @patch
 def files(self:Ledger, session):
-    "What one session did to each file it touched, one row per path."
+    "One row for each file that a session changed."
     out = {}
     for r in self.of('touch'):
         if r.session == session: out[r.path] = r
@@ -489,7 +489,7 @@ def session(self:Ledger, sid):
 # %% ../nbs/00_core.ipynb #bf3363a3
 @patch
 def trail(self:Ledger, path, limit=50):
-    "Every session that touched `path`, newest first, with its touch of that file."
+    "Every session that changed `path`, newest first, with its `touch` record."
     p, out = str(path), []
     by_session = {}
     for r in self.of('touch'):
@@ -508,7 +508,7 @@ def trail(self:Ledger, path, limit=50):
 
 @patch
 def touched(self:Ledger, since='', limit=200):
-    "Every path the ledger knows about, most recently touched first."
+    "Every path in the ledger. The path changed most recently is first."
     after, seen = _since(since), {}
     for r in self.of('touch'):
         if (r.get('at') or 0) < after: continue
@@ -518,7 +518,7 @@ def touched(self:Ledger, since='', limit=200):
 # %% ../nbs/00_core.ipynb #43957fae
 @patch
 def search(self:Ledger, query, limit=20):
-    "Sessions whose prompt, title or touched paths mention `query`."
+    "Each session with `query` in its prompt, its title, or a path it changed."
     q = str(query).lower()
     hits = {r.session for r in self.of('touch') if q in str(r.get('path', '')).lower()}
     out = []
@@ -530,7 +530,7 @@ def search(self:Ledger, query, limit=20):
 
 @patch
 def detail(self:Ledger, record_id):
-    "The machine-local half of one record: whole arguments, whole output, exact changed lines."
+    "The `detail` record for one id. It has the full arguments, the full output, and the line hashes."
     for r in self.all(DETAIL):
         if r.id == record_id: return r
     return None
@@ -538,7 +538,7 @@ def detail(self:Ledger, record_id):
 
 @patch
 def stats(self:Ledger):
-    "What this ledger holds."
+    "A summary of the ledger."
     kinds = {}
     for r in self.all(): kinds[r.kind] = kinds.get(r.kind, 0) + 1
     rows = fold(self.of('session'))

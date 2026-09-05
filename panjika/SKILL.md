@@ -1,17 +1,16 @@
 ---
 name: panjika
 description: >
-  Read and write the agent ledger for this repository. Use it before editing a file to see which
-  agent sessions have touched it and what became of their changes, and after a turn to check
-  whether your own changes landed in git, are still uncommitted, or were written over. Triggers
-  on: "did my change land", "who edited this file", "agent history", "what happened to my edit",
-  "panjika".
+  Read and write the agent ledger for this repository. Use it before you edit a file, to see
+  which agent sessions changed it and what happened to their changes. Use it after a turn, to
+  see if your own changes went into git, are still uncommitted, or were replaced. Triggers
+  on: "did my change land", "who edited this file", "agent history", "what happened to my
+  edit", "panjika".
 ---
 
 # panjika
 
-An append-only JSONL ledger of agent sessions, the files they touched, and where those changes
-went in git. Every harness working in this repository writes to the same one.
+A JSONL ledger of agent sessions, the files they changed, and the place those changes went to in git. panjika only adds to it. Each harness in this repository writes to the same ledger.
 
 ## Before you edit a file
 
@@ -19,60 +18,56 @@ went in git. Every harness working in this repository writes to the same one.
 panjika trail path/to/file.py
 ```
 
-Every agent session and every commit that has ever touched that file, newest first, on one
-timeline, each session with the branch it ran on. Read it when a file looks like somebody has
-been here before, or when a change you are about to make may undo one.
+This gives each agent session and each commit that changed the file, newest first, in one list. Each session shows the branch it ran on.
 
-## After you have changed something
+Read it when a file looks like another agent changed it. Read it when your change can remove an earlier one.
+
+## After you change something
 
 ```sh
 panjika landed            # the newest session in this ledger
-panjika landed --json     # the same, as records
+panjika landed --json     # the same answer, as records
 ```
 
-One verdict per file. Read the state first.
+You get one verdict for each file. Read the state first.
 
 | state | what it means | what to do |
 |---|---|---|
-| `landed` | every line is in a commit | nothing; it is done |
-| `partly_landed` | some lines are committed, some are gone or still uncommitted | read `why`; it counts them |
-| `pending` | the lines are in the working tree and nothing is committed | commit, or say why you are not |
-| `replaced` | none of the lines survive here; `why` names the commit and author that own them now | do not rewrite it. Read that commit first |
-| `gone` | the file is not in the working tree | check whether it moved |
-| `untracked` | git is not tracking the file | `git add` it, or it will never land |
-| `uncertain` | commits touched the file since, but no line record is here to say whether this change is in them | read those commits, or run where the session ran |
-| `unknown` | no line record and no commit since | nothing to go on |
+| `landed` | each line is in a commit | nothing |
+| `partly_landed` | some lines are in a commit, and some are gone or not committed | read `why`. It counts them |
+| `pending` | the lines are in the working tree, and nothing is committed | commit them, or give the reason |
+| `replaced` | no line is in the file here. `why` gives the commit and the author that own them now | do not write it again. Read that commit first |
+| `gone` | the file is not in the working tree | check if a person moved it |
+| `untracked` | git does not track the file | run `git add`, or the change cannot go into git |
+| `uncertain` | a commit changed the file after the session, but there is no line record | read those commits, or run panjika where the session ran |
+| `unknown` | there is no line record and no later commit | nothing to read |
 
-`evidence` says how sure the verdict is. `lines` matched the exact lines you wrote against
-`git blame`, which survives the file being reformatted, moved, or committed together with
-somebody else's change. `path` only knows that some commit touched the file afterwards, which
-is as consistent with a revert as with survival, so on `path` alone the answer is `uncertain`
-and never `landed`.
+`evidence` says how accurate the answer is.
+
+`lines` means panjika compared your lines with `git blame`. This answer stays correct if a person formats the file again, or moves the lines. It also stays correct if the lines go into git with another change.
+
+`path` means panjika only knows that a commit changed the file. That commit can be a revert, or it can hold your change. panjika cannot know which. Thus `path` gives `uncertain` and never `landed`.
 
 ## Branches
 
-A verdict is about one working tree. Three fields say which.
+A verdict is about one working tree. Four fields say which one.
 
-- `branch` is the branch the session ran on.
-- `branch_gone` is true when that branch no longer exists.
-- `elsewhere` names the branches whose committed copy of the file still holds every line. It is
-  filled in for `replaced` and `gone`.
-- `anywhere` is true for `landed`, `partly_landed` and `pending`, and for anything `elsewhere`
-  found. It is false for `uncertain`, `unknown` and `untracked` too, because none of those knows
-  where the lines are.
+- `branch` is the branch that the session ran on.
+- `branch_gone` is true if a person deleted that branch.
+- `elsewhere` gives each branch that has every line of the session in its copy of the file. panjika fills it in for `replaced` and `gone`.
+- `anywhere` is true for `landed`, `partly_landed` and `pending`, and for any branch in `elsewhere`. It is false for `uncertain`, `unknown` and `untracked`, because panjika cannot find the lines there.
 
-A change made on a feature branch reads as `replaced` from `main`. Check `elsewhere` before
-concluding anything from `replaced`. `replaced` with an empty `elsewhere` and `evidence` of
-`lines` means the work is on no branch here. Two branches that wrote the same line
-independently both count as holding it, because the match is on content.
+A change made on a feature branch reads `replaced` from `main`. Read `elsewhere` before you decide anything from `replaced`.
 
-## Planning against it
+`replaced` with an empty `elsewhere` and `evidence` of `lines` means the change is on no branch here.
 
-`replaced` with nothing in `elsewhere` is the one worth stopping for. Making the same change
-again is almost never the next thing to do. Read the commit named in `why`, then either work
-with it or say plainly that the two changes disagree.
+panjika compares the text of a line. Two branches that wrote the same line each count as a branch that has it.
 
-`pending` across many files at the end of a turn usually means the work is done and uncommitted.
+## How to plan with it
+
+Stop for `replaced` with an empty `elsewhere`. Do not make the same change again. Read the commit in `why`. Then work with that commit, or say that the two changes do not agree.
+
+Many files with `pending` at the end of a turn usually means the work is done and not committed.
 
 ## From Python
 
@@ -82,15 +77,14 @@ from panjika import landed, trail, log, session
 for v in landed():                 # the newest session in this repository
     print(v.state, v.path, v.why, v.branch)
 
-trail('src/app.py')                # sessions and commits on one timeline
-log(limit=10, harness='codex')     # what codex has been doing here
-session('latest').files            # what the last session changed
+trail('src/app.py')                # the sessions and the commits for one file
+log(limit=10, harness='codex')     # what codex did here
+session('latest').files            # the files that the last session changed
 ```
 
-`landed()` returns `Verdict` objects with `state`, `why`, `kept`, `total`, `survived`,
-`evidence`, `commits`, `branch`, `branch_gone`, `elsewhere` and `anywhere`.
+`landed()` gives `Verdict` objects. Each one has `state`, `why`, `kept`, `total`, `survived`, `evidence`, `commits`, `branch`, `branch_gone`, `elsewhere` and `anywhere`.
 
-## Recording from a harness with no adapter
+## From a harness with no adapter
 
 ```sh
 panjika record '{"session":"my-run","do":"begin","harness":"my-script","prompt":"regenerate fixtures"}'
@@ -98,17 +92,14 @@ panjika record '{"session":"my-run","do":"step","tool":"make","target":"fixtures
 panjika record '{"session":"my-run","do":"end","status":"done"}'
 ```
 
-## Setting it up
+## Setup
 
 ```sh
-panjika install        # hooks for Claude Code and Codex, a git post-commit hook, and this skill
-panjika init           # the ledger folder alone
-panjika backfill       # sessions that ran before the ledger existed, from the transcripts
+panjika install        # the hooks for Claude Code and Codex, the git hook, and this skill
+panjika init           # only the ledger folder
+panjika backfill       # the sessions that ran before the ledger existed
 ```
 
-Hooks only see what happens next, so a ledger installed today knows nothing about yesterday.
-`panjika backfill` reads the harness's own transcripts, subagents included. Run it before
-concluding from an empty trail that nothing ever touched the file.
+A hook only sees the next event. A ledger that you install today knows nothing about yesterday. `panjika backfill` reads the transcripts of the harness, and the transcripts of its subagents. Run it before you decide from an empty trail that no session changed the file.
 
-`.panjika/ledger/` is meant to be committed. `.panjika/detail/` is machine-local and gitignored.
-It holds whole tool arguments, whole outputs, and the line hashes that make `landed` exact.
+You commit `.panjika/ledger/`. You do not commit `.panjika/detail/`. The `detail` tier holds the full tool arguments, the full outputs, and the line hashes that `landed` needs.
