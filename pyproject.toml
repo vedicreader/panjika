@@ -26,11 +26,17 @@ Documentation = "https://vedicreader.github.io/panjika"
 [project.entry-points.nbdev]
 panjika = "panjika._modidx:d"
 
+[project.entry-points.pyskills]
+panjika = "panjika.skill"
+
 [tool.setuptools.dynamic]
 version = {attr = "panjika.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["panjika"]
+
+[tool.setuptools.package-data]
+panjika = ["SKILL.md"]
 
 [tool.nbdev]
 doc_host = "https://vedicreader.github.io"

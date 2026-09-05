@@ -51,9 +51,6 @@ class Ledger:
         return self.all(tier).filter(lambda r: r.kind == kind)
 
 # %% ../nbs/02_read.ipynb #1dd2089f
-#: Fields whose first value is the one that describes the session, not their last. A session's
-#: opening ask is what it was for, and its start is when it began; a harness that describes one
-#: session with a record per turn writes both again on every turn.
 OPENING = ('prompt', 'started')
 
 
@@ -64,21 +61,12 @@ def asks(recs, sid):
 
 
 def headline(asked):
-    """What a session was for: the first thing a person asked it.
-
-    A harness injects prompts of its own -- a notification, a reminder, a resumed turn -- and
-    one of those is regularly the first record in a transcript. Opening on one of them
-    describes the session by something nobody asked for.
-    """
+    "What a session was for: the first thing a person asked it."
     return next((p for p, o in asked if o != 'injected'), asked[0][0] if asked else '')
 
 
 def counters(steps):
-    """What a session's steps add up to: how many worked, how many did not, and which tools.
-
-    The count is `n_steps` rather than `steps`, because `steps` on a session row is the list of
-    the step records themselves and a count would be standing where the list belongs.
-    """
+    "What a session's steps add up to: how many worked, how many did not, and which tools."
     ok = sum(1 for s in steps if s.get('ok', True))
     tools, actions = {}, {}
     for s in steps:
@@ -127,11 +115,7 @@ def sessions_touching(self:Ledger, path):
 # %% ../nbs/02_read.ipynb #f37962de
 @patch
 def files(self:Ledger, session):
-    """What one session did to each file it touched, one row per path.
-
-    A session that edits a file five times leaves five touches of the same net change against
-    `HEAD`, so the last one is the whole of what it did and the rest are its working.
-    """
+    "What one session did to each file it touched, one row per path."
     out = {}
     for r in self.of('touch'):
         if r.session == session: out[r.path] = r
@@ -140,11 +124,7 @@ def files(self:Ledger, session):
 
 @patch
 def session(self:Ledger, sid):
-    """One session, with everything recorded against it.
-
-    The counters are computed here rather than written. A hook fires once per tool call in its
-    own process and cannot keep a running total, so counting is the reader's job.
-    """
+    "One session, with everything recorded against it."
     recs = self.of('session')
     rows = fold(recs, first=OPENING).filter(lambda r: r.session == sid)
     row = AttrDict(rows[0]) if rows else AttrDict(kind='session', session=sid, id=sid)
@@ -157,8 +137,6 @@ def session(self:Ledger, sid):
             key=lambda r: r.get('at') or 0)
     row['files'] = self.files(sid)
     row.update(counters(row.steps))
-    # an adapter that records a session without a `begin` leaves no `started`, and subtracting
-    # zero from an epoch would report the age of the epoch as the length of the session
     began = row.get('started') or row.get('at') or 0
     row['seconds'] = round((row.get('ended') or row.get('at') or 0) - began, 1) if began else 0.0
     return row
@@ -170,7 +148,7 @@ def trail(self:Ledger, path, limit=50):
     p, out = str(path), []
     by_session = {}
     for r in self.of('touch'):
-        if r.get('path') == p: by_session[r.session] = r      # the last touch is the net one
+        if r.get('path') == p: by_session[r.session] = r
     rows = {r.session: r for r in fold(self.of('session'))}
     commits = {}
     for c in self.of('commit'):

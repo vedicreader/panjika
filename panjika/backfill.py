@@ -22,7 +22,6 @@ from .write import action_for
 from .write import Scribe
 
 # %% ../nbs/06_backfill.ipynb #0bd028d0
-#: Where Claude Code keeps its projects. One folder per working directory, the path slugified.
 SESSIONS = Path.home()/'.claude'/'projects'
 
 def sess_dir(cwd=None, root=None):
@@ -38,7 +37,7 @@ def read_recs(path):
     for line in raw.splitlines():
         if not line.strip(): continue
         try: out.append(json.loads(line))
-        except ValueError: continue      # a torn last line, or one the harness half wrote
+        except ValueError: continue
     return out
 
 def at_of(rec):
@@ -49,7 +48,6 @@ def at_of(rec):
     except ValueError: return None
 
 # %% ../nbs/06_backfill.ipynb #029c6fd2
-#: Openers of text the harness injected rather than a person typing it.
 INJECTED = ('<task-notification', '<system-reminder', '<wake ', '<local-command',
             '<command-name', '<user-prompt-submit-hook')
 
@@ -79,14 +77,12 @@ def block_text(content):
     return '\n'.join(x for x in out if x)
 
 # %% ../nbs/06_backfill.ipynb #785d6978
-#: Tool name -> the argument holding the path, and what the tool did to it.
 TOOL_PATHS = {
     'Edit': ('file_path', 'edit'), 'Write': ('file_path', 'create'),
     'MultiEdit': ('file_path', 'edit'), 'NotebookEdit': ('notebook_path', 'edit'),
     'Read': ('file_path', 'read'), 'NotebookRead': ('notebook_path', 'read'),
 }
 
-#: A candidate carrying any of these is a pattern or a variable, not a path this code can name.
 UNRESOLVED = ('$', '*', '?', '{', '}', '[', ']')
 _HEREDOC = re.compile(r'(?:^|\s)<<-?\s*[\x27\x22]?(\w+)[\x27\x22]?\s*$')
 _SEPS = ('|', '||', '&&', ';', '&')
@@ -125,7 +121,7 @@ def bash_paths(cmd):
     out = []
     for line in _cmd_lines(cmd):
         for seg in _segments(line):
-            if seg[0] in ('[[', '[', 'test'): continue          # a comparison, not a redirect
+            if seg[0] in ('[[', '[', 'test'): continue
             for i, t in enumerate(seg):
                 if t in _REDIR and i + 1 < len(seg): out.append(seg[i+1])
                 elif len(t) > 1 and t[0] == '>' and t[1] != '&': out.append(t.lstrip('>'))
@@ -178,12 +174,7 @@ def usage_of(recs):
     return tot
 
 def rec_id(*parts):
-    """A record id derived from the transcript, so re-reading it writes the same record.
-
-    A hook fires once per event and can take a fresh id. A backfill re-reads events it has
-    already seen, and the ledger deduplicates by id, so naming them stably is what makes
-    running it twice a no-op instead of a doubling.
-    """
+    "A record id derived from the transcript, so re-reading it writes the same record."
     return 'b' + hashed('\x1f'.join(str(p) for p in parts), 22)
 
 
@@ -216,8 +207,6 @@ def transcript_plan(recs, session='', agent='', meta=None, harness='claude-code'
         m = r.get('message')
         if not isinstance(m, dict): continue
         if not opened and (r.get('type') == 'assistant' or _has_tool(m)):
-            # the transcript opens mid-conversation: a resumed or compacted session. Claiming a
-            # later prompt caused this work would be worse than admitting there is none here.
             act(p, 'note', text='resumed: the prompt for this work is not in this transcript',
                 at=at_of(r), id=rec_id('resumed', p.session))
             opened = True
@@ -253,7 +242,7 @@ def _call_acts(p, rec, msg, results, sid=''):
             id=rec_id('step', sid, tid), action=action_for(tool),
             secs=round(done - started, 2) if started and done else 0.0,
             summary='' if res else 'the call had not returned when this was read')
-        if not (ok and res): continue      # a refused call moved nothing; an open one is unknown
+        if not (ok and res): continue
         before, after = bodies(tool, args, payload)
         for path, action in call_touches(tool, args, payload):
             if action == 'read': continue
@@ -268,19 +257,13 @@ def _target_of(args):
 
 # %% ../nbs/06_backfill.ipynb #6e329335
 def apply_plan(p, home=None, start=None):
-    """Run a plan against a ledger. Returns the number of records written.
-
-    A named `home` wins. Without one the session goes to the ledger of the directory it ran
-    in, which is what routes a backfill of every project to the right repository.
-    """
+    "Run a plan against a ledger. Returns the number of records written."
     if not p.acts: return 0
     where = (p.start or start) if home is None else (start or p.start)
     sc = Scribe(home=home, session=p.session, start=where or '.')
     if not sc.home.exists: sc.home.init()
     for a in p.acts:
         a = dict(a); do = a.pop('do')
-        # one unreadable act must not stop a backfill, but a session with steps and no row of
-        # its own is not a session, so `begin` failing is not something to carry on through
         if do == 'begin': getattr(sc, do)(**a); continue
         try: getattr(sc, do)(**a)
         except Exception: continue
@@ -315,5 +298,5 @@ def backfill(cwd=None, root=None, home=None, start=None, limit=0):
     out = []
     for f in files:
         try: out += backfill_session(f, home, start)
-        except Exception: continue        # one unreadable transcript must not stop the rest
+        except Exception: continue
     return out

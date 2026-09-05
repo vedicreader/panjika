@@ -45,12 +45,17 @@ that change again now knows not to.
 
 ```sh
 pip install panjika
-panjika install     # Claude Code and Codex hooks, a git post-commit hook, the ledger
+panjika install     # Claude Code and Codex hooks, a git post-commit hook, the skill, the ledger
 panjika backfill    # and everything that already happened, out of the transcripts
 ```
 
 `panjika install` writes `.claude/settings.json`, `.codex/hooks.json` and
 `.git/hooks/post-commit`. Codex will not run a hook until you have reviewed it with `/hooks`.
+
+It also writes `SKILL.md` into `.claude/skills/panjika/`, `.agents/skills/panjika/` and
+`.codex/skills/panjika/`. One file ships inside the package and every copy comes from it.
+`[project.entry-points.pyskills]` publishes the same text to a harness that reads skills from
+installed packages rather than from disk.
 
 ## What `landed` says
 
@@ -64,6 +69,30 @@ panjika backfill    # and everything that already happened, out of the transcrip
 | `untracked` | git is not tracking the file | `git add` it, or it will never land |
 | `uncertain` | commits touched the file since, but no line record is here to say whether this change is in them | read those commits, or run where the session ran |
 | `unknown` | nothing to go on | no line record and no commit since |
+
+## Which branch
+
+A verdict is about one working tree. A change made on a feature branch reads as `replaced` from
+`main`, and reads correctly from the branch itself.
+
+`branch` is the branch the session ran on. `branch_gone` says that branch is now deleted.
+`elsewhere` names the branches that still hold every line, filled in when the state is
+`replaced` or `gone`. `anywhere` is false only when the lines are in no branch at all.
+
+```
+$ panjika landed rb-0c7e            # standing on main
+replaced  charges.py  0/1 lines  on feature
+    none of the 1 lines this session wrote are in the file; still on feature
+
+$ git branch -D feature
+$ panjika landed rb-0c7e
+replaced  charges.py  0/1 lines  on feature
+    none of the 1 lines this session wrote are in the file; and on no other branch either;
+    the branch feature it ran on is gone
+```
+
+`elsewhere` is answered by hashing each branch's copy of the file and matching the recorded
+lines, so it needs no checkout and no blame.
 
 `evidence` says how sure the verdict is. `lines` matched the exact lines the session wrote
 against `git blame`, which survives the file being reformatted, moved around, or committed
@@ -85,7 +114,8 @@ session('latest').files             # what the last session changed
 ```
 
 `landed()` returns `Verdict` objects carrying `state`, `why`, `kept`, `total`, `survived`,
-`evidence` and `commits`. Every command takes `--json` for the same answers as records.
+`evidence`, `commits`, `branch`, `branch_gone`, `elsewhere` and `anywhere`. Every command takes
+`--json` for the same answers as records.
 
 ## How it is stored
 
@@ -202,7 +232,7 @@ through `pending`, `landed`, `partly_landed`, `replaced`, `untracked` and `gone`
 deletes the machine-local tier to ask the same question from the far side of a clone.
 `00_core.ipynb` merges two branches that both appended. `06_backfill.ipynb` imports a
 transcript and asks `landed` about the session in it. The shell-command table in
-`06_backfill.ipynb` and the payload shapes in `04_harness.ipynb` are worth reading, not just
+`06_backfill.ipynb` and the payload shapes in `04_harness.ipynb` are worth reading as well as
 running.
 
 ## License

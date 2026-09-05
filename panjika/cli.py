@@ -44,7 +44,6 @@ def plain(o):
     "Anything the ledger holds, as something JSON can carry."
     if isinstance(o, Path): return str(o)
     if isinstance(o, dict): return {str(k): plain(v) for k, v in o.items()}
-    # `L` is not a list subclass, so it has to be named rather than caught by `list`
     if isinstance(o, (list, tuple, set, L)): return [plain(x) for x in o]
     if hasattr(o, 'dict') and callable(o.dict): return plain(o.dict())
     return o
@@ -108,7 +107,8 @@ def cmd_trail(a):
             print(f"          {r.author}  {ago(r.at)}")
         else:
             print(f"{tint(r.session[:7], '33')}  {tint(r.harness or 'agent', '36')}  {r.title[:80]}")
-            print(f"          +{r.added}/-{r.removed}  {r.model or ''}  {ago(r.at)}")
+            where = f"  {r.get('branch')}" if r.get('branch') else ''
+            print(f"          +{r.added}/-{r.removed}  {r.model or ''}{where}  {ago(r.at)}")
 
 
 def cmd_landed(a):
@@ -119,7 +119,8 @@ def cmd_landed(a):
     if not r.verdicts: return print('nothing recorded to check')
     for v in r.verdicts:
         share = '' if not v.total else f'  {v.kept}/{v.total} lines'
-        print(f"{tint(v.state, STATE_COLOURS.get(v.state, ''))}  {v.path}{share}")
+        where = tint(f"  on {v.branch}", '90') if v.branch else ''
+        print(f"{tint(v.state, STATE_COLOURS.get(v.state, ''))}  {v.path}{share}{where}")
         print(f"    {v.why}")
         for c in v.commits: print(f"    {tint(c.short, '32')} {c.subject[:70]}")
     print(f'\n{r.summary}')
@@ -132,7 +133,7 @@ def cmd_init(a):
 
 def cmd_install(a):
     res = install(a.root, claude_code=not a.no_claude_code, codex=not a.no_codex,
-                  git=not a.no_git, home=a.home)
+                  git=not a.no_git, skill=not a.no_skill, home=a.home)
     for p in res.wrote: print(f'wrote {p}')
     for s in res.skipped: print(f'skipped {s}')
     print(f'ledger at {res.home}')
@@ -163,8 +164,6 @@ def cmd_stats(a):
 def cmd_backfill(a):
     "Read transcripts a harness wrote before there was a ledger."
     from .backfill import backfill, backfill_session
-    # standing in a repository means this repository's ledger, whatever directory the session
-    # ran in. `--all` is the one case that routes each session to its own project instead.
     home = None if a.all else Home(a.home, a.root)
     p = Path(a.path).expanduser() if a.path else None
     if p is not None and p.is_file(): rows = backfill_session(p, home=home, start=a.root)
@@ -179,8 +178,6 @@ def cmd_export(a):
     "Every ledger record as JSONL on stdout. The portable form."
     led = Ledger(a.home, a.root)
     after = _since(a.since)
-    # bytes straight out where there is a byte stream, text where a caller has replaced stdout
-    # with one that has none. `dumps` already ends every record with its newline.
     raw = getattr(sys.stdout, 'buffer', None)
     for r in led.all(DETAIL if a.detail else LEDGER):
         if (r.get('at') or 0) < after: continue
@@ -223,6 +220,7 @@ def build_parser():
     s.add_argument('--no-claude-code', action='store_true')
     s.add_argument('--no-codex', action='store_true')
     s.add_argument('--no-git', action='store_true')
+    s.add_argument('--no-skill', action='store_true')
 
     s = add('hook', cmd_hook, 'record one harness payload from stdin', json_flag=False)
     s.add_argument('adapter', choices=sorted(ADAPTERS), nargs='?', default='generic')
@@ -249,8 +247,6 @@ def main(argv=None):
     a = build_parser().parse_args(argv)
     try: a.fn(a)
     except BrokenPipeError:
-        # `panjika trail x | head` closes the pipe under us. Writing to devnull from here on
-        # keeps the interpreter from reporting the same broken pipe again while it exits.
         sys.stdout = open(os.devnull, 'w')
         return 0
     return 0

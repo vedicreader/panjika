@@ -6,19 +6,20 @@ Docs: https://vedicreader.github.io/panjika/harness.html.md"""
 
 # %% auto #0
 __all__ = ['PATH_KEYS', 'TARGET_KEYS', 'CODEX_EDITS', 'ADAPTERS', 'CC_EVENTS', 'POST_COMMIT', 'CODEX_EVENTS', 'CODEX_TRUST',
-           'CODEX_SNIPPET', 'plan', 'act', 'first_of', 'tool_target', 'tool_path', 'claude_code', 'patch_paths',
-           'codex_paths', 'codex', 'codex_notify', 'ramabana', 'generic', 'ingest', 'hook', 'codex_hooks',
-           'cc_settings', 'install']
+           'CODEX_SNIPPET', 'SKILL_DIRS', 'plan', 'act', 'first_of', 'tool_target', 'tool_path', 'claude_code',
+           'patch_paths', 'codex_paths', 'codex', 'codex_notify', 'ramabana', 'generic', 'ingest', 'hook',
+           'codex_hooks', 'cc_settings', 'skill_md', 'skill_body', 'write_skill', 'install']
 
 # %% ../nbs/04_harness.ipynb #c9717a73
 import json, os, re, sys
+from importlib.resources import files
 from pathlib import Path
 
 from fastcore.basics import AttrDict
 from fastcore.foundation import L
 
 from .core import Home, now
-from .write import Scribe, action_for
+from .write import Scribe, action_for, repo_facts
 
 # %% ../nbs/04_harness.ipynb #322cecdf
 def plan(session='', start='', **acts):
@@ -40,10 +41,8 @@ def first_of(d, *keys, default=''):
     return default
 
 # %% ../nbs/04_harness.ipynb #98927de1
-#: Where a file path hides in a tool's arguments, across the harnesses and their MCP servers.
 PATH_KEYS = ('file_path', 'filePath', 'notebook_path', 'notebookPath', 'path', 'filename', 'file')
 
-#: What else is worth putting in the one-line target when there is no path.
 TARGET_KEYS = ('command', 'url', 'pattern', 'query', 'prompt', 'description', 'code')
 
 
@@ -86,8 +85,6 @@ def claude_code(payload):
     return out
 
 # %% ../nbs/04_harness.ipynb #f49bf0ab
-#: Codex's own tool names. `apply_patch` is its editor, and it names the files inside the
-#: patch envelope rather than in an argument.
 CODEX_EDITS = ('apply_patch', 'Edit', 'Write')
 _PATCH_FILE = re.compile(r'^\*\*\* (?:Add|Update|Delete) File: (.+)$', re.M)
 
@@ -114,16 +111,7 @@ def _codex_failed(response):
 
 
 def codex(payload):
-    """One Codex lifecycle-hook payload as a plan.
-
-    Codex hooks deliver one JSON object on stdin and use the same event names as Claude Code,
-    so this reads much the same. What differs: there is no separate failure event, so an error
-    is read out of `tool_response`; the editor is `apply_patch`, which names its files inside
-    the patch rather than in an argument; and a subagent reports its parent's `session_id`
-    alongside its own `agent_id`.
-
-    Verified against the hook reference at https://developers.openai.com/codex/hooks.
-    """
+    "One Codex lifecycle-hook payload as a plan."
     p = payload or {}
     event = str(p.get('hook_event_name') or '')
     out = plan(p.get('session_id'), p.get('cwd'))
@@ -153,20 +141,9 @@ def codex(payload):
 
 
 def codex_notify(payload):
-    """One legacy Codex `notify` payload as a plan.
-
-    `notify` fires once per completed turn and nowhere else, so it records a turn and never a
-    tool call. Its keys are kebab-case, unlike every other Codex surface, and it carries no
-    model. Codex passes it as a command-line argument with stdin closed, so it is reached
-    through `panjika record`, not `panjika hook`.
-
-    Verified against `codex-rs/hooks/src/legacy_notify.rs`, which serialises
-    `AgentTurnComplete` with `#[serde(rename_all = "kebab-case")]`.
-    """
+    "One legacy Codex `notify` payload as a plan."
     p = payload or {}
     if str(p.get('type') or '') != 'agent-turn-complete': return plan('', '')
-    # `thread-id` and `cwd` were added after this payload first shipped, so an older Codex
-    # sends neither and the turn id is all there is to join on.
     out = plan(first_of(p, 'thread-id', 'turn-id'), str(p.get('cwd') or ''))
     act(out, 'begin', harness='codex', model='', title=str(p.get('client') or ''))
     for text in (p.get('input-messages') or []):
@@ -177,25 +154,18 @@ def codex_notify(payload):
 
 # %% ../nbs/04_harness.ipynb #a97f15bb
 def ramabana(payload):
-    """One Ramabana turn record as a plan.
-
-    `{session, model, prompt, reply, at, usage, activity: [Act.dict(), ...]}`, which is what
-    `Agent._remember` builds. An `Act` on its own is taken as one step.
-    """
+    "One Ramabana turn record as a plan, or one `Act` on its own as one step."
     p = payload or {}
     out = plan(first_of(p, 'session', 'session_id'), first_of(p, 'cwd', 'root'))
     if not any(p.get(k) for k in ('activity', 'prompt', 'reply', 'tool', 'model', 'error')):
         return out
-    if p.get('tool') and 'activity' not in p:          # one `Act`, not a whole turn
+    if p.get('tool') and 'activity' not in p:
         act(out, 'step', tool=p['tool'], target=_act_target(p), ok=bool(p.get('ok', True)),
             secs=float(p.get('secs') or 0), summary=str(p.get('summary') or ''),
             args=p.get('args'), output=p.get('detail'))
         if _act_path(p): act(out, 'touch', path=_act_path(p), action='edit')
         return out
     usage, at = p.get('usage') or {}, p.get('at')
-    # `at` is when the turn ran. Ramabana hands a turn over as it finishes, but it also replays
-    # its own history, and a session stamped at ingest sorts as the newest thing that ever
-    # happened -- which is what `log`, `--since` and a bare `landed` all resolve through.
     act(out, 'write', kind='session', harness='ramabana', model=str(p.get('model') or ''),
         prompt=str(p.get('prompt') or '')[:2000], status=str(p.get('state') or 'done'),
         at=at, started=at,
@@ -221,18 +191,14 @@ def _act_path(a):
 
 # %% ../nbs/04_harness.ipynb #d176cda8
 def generic(payload):
-    """A payload that already speaks the ledger's own shape.
-
-    `{"session": "...", "cwd": "...", "do": "step", "tool": "Edit", "target": "a.py"}`, or the
-    same with `acts` holding a list of those.
-    """
+    "A payload that already speaks the ledger's own shape, as one act or a list under `acts`."
     p = dict(payload or {})
     out = plan(first_of(p, 'session', 'session_id'), first_of(p, 'cwd', 'start'))
     acts = p.get('acts')
     if acts is None:
         do = p.pop('do', None)
         for k in ('session', 'session_id', 'cwd', 'start', 'harness_name'): p.pop(k, None)
-        if not do and not p: return out         # nothing was asked for, so nothing is written
+        if not do and not p: return out
         acts = [{'do': do or 'note', **p}]
     for a in acts:
         a = dict(a)
@@ -240,7 +206,6 @@ def generic(payload):
     return out
 
 
-#: Every harness this package can read. A new one is a function and a line here.
 ADAPTERS = {'claude-code': claude_code, 'codex': codex, 'codex-notify': codex_notify, 'ramabana': ramabana,
             'generic': generic}
 
@@ -249,27 +214,25 @@ def ingest(payload, adapter='generic', home=None, start='.', harness=''):
     "Apply one payload to a ledger. Returns the plan that was applied."
     build = ADAPTERS.get(str(adapter), generic)
     p = build(payload)
-    # a payload an adapter had nothing to say about must not make a ledger where there is none
     if not p.acts:
         p.wrote, p.home = 0, ''
         return p
     sc = Scribe(home=home, session=p.session, start=p.start or start)
     if not sc.home.exists: sc.home.init()
+    facts = None
     for a in p.acts:
         do = a.pop('do')
         if do == 'begin': a.setdefault('harness', harness or str(adapter))
+        elif do == 'write' and a.get('kind') == 'session' and 'branch' not in a:
+            if facts is None: facts = repo_facts(sc.start)
+            a = {**facts, **a}
         getattr(sc, do)(**a)
     p.wrote, p.home, p.session = len(p.acts), str(sc.home.path), sc.session
     return p
 
 
 def hook(adapter='generic', stream=None, home=None, start=None):
-    """Read one payload from `stream` and record it. Never raises.
-
-    A hook that fails must not take the harness down with it, and a harness that cannot be
-    recorded is still a harness that works, so every failure here is swallowed and reported on
-    stderr where the harness logs it.
-    """
+    "Read one payload from `stream` and record it. Never raises; failures go to stderr."
     try:
         raw = (stream or sys.stdin).read()
         payload = json.loads(raw) if raw.strip() else {}
@@ -291,17 +254,12 @@ POST_COMMIT = """#!/bin/sh
 panjika link-commit "$(git rev-parse HEAD)" >/dev/null 2>&1 || true
 """
 
-#: Codex's lifecycle events, and what each one matches. Its vocabulary is Claude Code's, with
-#: no separate failure event: a failed call is a `PostToolUse` whose `tool_response` says so.
 CODEX_EVENTS = {'SessionStart': '', 'UserPromptSubmit': '', 'SessionEnd': '',
                 'PostToolUse': '.*', 'SubagentStart': '', 'SubagentStop': ''}
 
 CODEX_TRUST = ("Codex will not run a hook until you have reviewed it. Run `/hooks` in Codex, "
                "read the entry, and trust it.")
 
-#: The legacy `notify` route, for a Codex too old to have hooks. It fires once per turn and
-#: never per tool call, and Codex passes it as an argument with stdin closed, so it goes
-#: through `panjika record` rather than `panjika hook`.
 CODEX_SNIPPET = """# ~/.codex/config.toml
 # Only for a Codex without lifecycle hooks. One record per turn, no tool calls.
 notify = ["panjika", "record", "--adapter", "codex-notify"]
@@ -341,9 +299,36 @@ def cc_settings(path='.claude/settings.json', command='panjika hook claude-code'
         hooks[event] = entries + [entry]
     return doc
 
+# %% ../nbs/04_harness.ipynb #dfaccb42
+SKILL_DIRS = ('.claude/skills/panjika', '.agents/skills/panjika', '.codex/skills/panjika')
+
+
+def skill_md():
+    "The packaged `SKILL.md`, frontmatter and all."
+    return (files('panjika')/'SKILL.md').read_text(encoding='utf-8')
+
+
+def skill_body(text=None):
+    "A skill document without its YAML frontmatter."
+    text = skill_md() if text is None else text
+    if not text.startswith('---'): return text
+    end = text.find('\n---', 3)
+    return text if end < 0 else text[end + 4:].lstrip('\n')
+
+
+def write_skill(root='.', dirs=SKILL_DIRS):
+    "Write the packaged skill into each agent's skill folder under `root`. Returns the paths."
+    body, out = skill_md(), L()
+    for d in dirs:
+        p = Path(root)/d/'SKILL.md'
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body)
+        out.append(str(p))
+    return out
+
 # %% ../nbs/04_harness.ipynb #81145f9a
-def install(root='.', claude_code=True, git=True, codex=True, home=None):
-    "Write the hook configuration into `root`. Returns what was written and what was not."
+def install(root='.', claude_code=True, git=True, codex=True, skill=True, home=None):
+    "Write the hook configuration and the skill into `root`. Returns what was written and what was not."
     root = Path(root)
     out, ledger = AttrDict(wrote=L(), skipped=L(), codex=CODEX_SNIPPET,
                            note=CODEX_TRUST), Home(home, root)
@@ -359,6 +344,7 @@ def install(root='.', claude_code=True, git=True, codex=True, home=None):
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(codex_hooks(p), indent=2) + '\n')
         out.wrote.append(str(p))
+    if skill: out.wrote += write_skill(root)
     if git:
         from panjika.core import git_root
         gr = git_root(root)

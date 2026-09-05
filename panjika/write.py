@@ -21,7 +21,6 @@ from .core import (DETAIL, LEDGER, MAX_DETAIL, Home, append, file_hash, git_root
                    new_id, now)
 
 # %% ../nbs/01_write.ipynb #78c18ffd
-#: action -> the substrings of a tool name that mean it. First match wins, so order matters.
 ACTION_HINTS = (
     ('write', ('edit', 'write', 'patch', 'create', 'apply', 'update', 'insert', 'replace', 'delete')),
     ('run',   ('bash', 'shell', 'exec', 'run', 'terminal', 'command', 'python', 'notebook_run')),
@@ -49,11 +48,7 @@ def _target(value, n=160):
 
 
 class Scribe:
-    """Appends to one ledger.
-
-    `home` is found from `start` when it is not given, so a hook in a repository writes to that
-    repository's ledger without being told where it is.
-    """
+    "Appends to one ledger."
 
     def __init__(self,
                  home=None,         # the ledger folder. None finds one from `start`
@@ -68,14 +63,7 @@ class Scribe:
     def __repr__(self): return f'Scribe({self.session} -> {self.home.path})'
 
     def write(self, kind, detail=None, **fields):
-        """Append one record. `detail` goes to the machine-local tier under the same id.
-
-        Every record gets an `id`, which is only ever used to drop a line that reached the
-        ledger twice. A caller that can name an event stably -- a backfill re-reading the same
-        transcript -- passes its own, and re-recording that event changes nothing. Records
-        belong to a session through `session`, so a session can be described by as many
-        records as it takes.
-        """
+        "Append one record. `detail` goes to the machine-local tier under the same id."
         rec = {'kind': kind, 'id': fields.pop('id', None) or new_id(),
                'at': fields.pop('at', None) or now(),
                'session': fields.pop('session', None) or self.session, **fields}
@@ -93,7 +81,6 @@ def repo_facts(start='.'):
     root = git_root(start)
     branch = ''
     if root is not None:
-        # gheasy has no public accessor for the checked-out branch, so ask git through its own
         try: branch = GitRepo(root).run('rev-parse', '--abbrev-ref', 'HEAD').strip()
         except Exception: branch = ''
     return {'repo': root.name if root else '', 'root': str(root) if root else '',
@@ -151,12 +138,7 @@ def text_changes(before, after):
 
 
 def diff_lines(diff):
-    """The added and removed lines of a unified diff, without its headers.
-
-    A header is `+++ ` or `--- ` with its space. Testing for `+++` alone drops a body line
-    whose own text starts with `++`, and the same edit then counts differently depending on
-    whether a hook or a backfill recorded it.
-    """
+    "The added and removed lines of a unified diff, without its headers."
     added, removed = [], []
     for line in str(diff or '').splitlines():
         if line[:4] in ('+++ ', '--- ') or line in ('+++', '---'): continue
@@ -172,17 +154,14 @@ def head_hash(root, path):
 
 # %% ../nbs/01_write.ipynb #c07d0790
 @patch
-def touch(self:Scribe, path, action='edit', step='', before=None, after_text=None, **fields):
-    """Record that a file was touched, and how it now differs from `HEAD`.
-
-    The difference is measured against `HEAD` rather than against the previous touch, so a
-    session that edits one file five times leaves five records of the same net change and a
-    reader can keep the last without arithmetic.
-
-    `before` and `after_text` are for a backfill, where the working tree has moved on and git
-    can no longer say what the session did. Given them, the change is read from the bodies the
-    transcript carries instead of from the repository.
-    """
+def touch(self:Scribe,
+          path,               # the file that moved, absolute or relative to `start`
+          action='edit',      # what happened to it: edit, create, delete
+          step='',            # the id of the step that did it
+          before=None,        # the body before the change, for a backfill
+          after_text=None,    # the body after it, for a backfill
+          **fields):
+    "Record that a file was touched, and how it now differs from `HEAD`."
     p = Path(path)
     root = git_root(p if p.is_absolute() else self.start)
     rel = str(p.resolve().relative_to(root)) if root and p.is_absolute() else str(path)

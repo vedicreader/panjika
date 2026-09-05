@@ -12,3 +12,8 @@ dist/
 # worked on, not to the package that writes it.
 .panjika/
 uv.lock
+
+# written by `panjika install` from panjika/SKILL.md
+.claude/skills/
+.agents/skills/
+.codex/skills/

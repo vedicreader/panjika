@@ -9,7 +9,7 @@ __all__ = ['KINDS', 'LEDGER', 'DETAIL', 'DIR', 'MAX_LINE', 'MAX_DETAIL', 'GITATT
            'new_id', 'hashed', 'file_hash', 'git_root', 'find_home', 'Home', 'clip', 'append', 'read_shard', 'records',
            'fold']
 
-# %% ../nbs/00_core.ipynb #8e10346a
+# %% ../nbs/00_core.ipynb #4f7ada9e
 import hashlib, os, time, uuid
 from pathlib import Path
 
@@ -17,24 +17,14 @@ import orjson
 from fastcore.basics import AttrDict, ifnone
 from fastcore.foundation import L
 
-# %% ../nbs/00_core.ipynb #ff2888ec
-#: The record kinds. A line whose `kind` is not one of these is skipped by every reader here,
-#: so a newer writer can add a kind without breaking an older reader.
+# %% ../nbs/00_core.ipynb #9305d97b
 KINDS = ('session', 'step', 'touch', 'commit', 'note')
-
-#: Where a ledger keeps its two tiers, relative to the ledger folder.
 LEDGER, DETAIL = 'ledger', 'detail'
-
-#: The folder name a ledger takes, in a repository or in the home directory.
 DIR = '.panjika'
-
-#: One committed line, capped. A ledger row is a summary; anything longer belongs in `detail`.
 MAX_LINE = 16_000
-
-#: One detail line. Large, because a tool result belongs here whole, but not unbounded.
 MAX_DETAIL = 400_000
 
-# %% ../nbs/00_core.ipynb #d976f85e
+# %% ../nbs/00_core.ipynb #3cbb3c76
 def dumps(rec):
     "One record as the bytes of a line, newline included."
     return orjson.dumps(rec, option=orjson.OPT_SORT_KEYS) + b'\n'
@@ -46,7 +36,7 @@ def loads(line):
     except orjson.JSONDecodeError: return None
     return AttrDict(rec) if isinstance(rec, dict) else None
 
-# %% ../nbs/00_core.ipynb #403e34f0
+# %% ../nbs/00_core.ipynb #a00e71fe
 def now(): return round(time.time(), 3)
 
 
@@ -56,7 +46,7 @@ def new_id(prefix=''):
 
 
 def hashed(data, n=16):
-    "A short content hash. Used for file contents and for the text of a changed line."
+    "A short content hash, for file contents and for the text of a changed line."
     if isinstance(data, str): data = data.encode('utf-8', 'replace')
     return hashlib.blake2b(data, digest_size=n // 2).hexdigest()
 
@@ -66,7 +56,7 @@ def file_hash(path):
     try: return hashed(Path(path).read_bytes())
     except OSError: return ''
 
-# %% ../nbs/00_core.ipynb #b6b5f0ce
+# %% ../nbs/00_core.ipynb #fe093f94
 def git_root(start='.'):
     "The repository `start` is inside, or `None`."
     try:
@@ -84,7 +74,7 @@ def find_home(start='.'):
     root = git_root(here)
     return (root or Path.home())/DIR
 
-# %% ../nbs/00_core.ipynb #2135323a
+# %% ../nbs/00_core.ipynb #4ad1cfeb
 GITATTRIBUTES = """# Append-only. Take both sides of a merge; readers deduplicate by record id.
 ledger/*.jsonl merge=union
 """
@@ -126,7 +116,7 @@ class Home:
         (self.path/'.gitignore').write_text(GITIGNORE)
         return self
 
-# %% ../nbs/00_core.ipynb #2ca439e4
+# %% ../nbs/00_core.ipynb #f19ae24d
 def clip(rec, limit):
     "Shorten a record until its line fits, longest string field first."
     line = dumps(rec)
@@ -151,7 +141,7 @@ def append(path, rec, limit=MAX_LINE):
     finally: os.close(fd)
     return AttrDict(rec)
 
-# %% ../nbs/00_core.ipynb #8c4b425b
+# %% ../nbs/00_core.ipynb #bfe283d6
 def read_shard(path):
     "Every readable record in one shard."
     out = L()
@@ -174,17 +164,9 @@ def records(home, tier=LEDGER):
             out.append(rec)
     return out.sorted(key=lambda r: r.get('at') or 0)
 
-# %% ../nbs/00_core.ipynb #eb0a0ee1
+# %% ../nbs/00_core.ipynb #0d4f04ee
 def fold(recs, key='session', first=()):
-    """Merge records sharing `key` into one row each, later values winning.
-
-    A blank later value never erases an earlier one, so a hook that knows only half the facts
-    can append what it knows without wiping what another harness already recorded.
-
-    A field named in `first` keeps its earliest value instead. A session's opening ask is what
-    it was for, and a session is described by one record per prompt, so letting the last one
-    win headlines a long session with whatever was said to it most recently.
-    """
+    "Merge records sharing `key` into one row each, later values winning and `first` fields keeping their earliest."
     out, held = {}, {}
     for rec in recs:
         k = rec.get(key)
