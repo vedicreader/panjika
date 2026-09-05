@@ -21,6 +21,9 @@ the documentation for what it tests.
   the epoch. Ramabana never calls `begin`, so it has none; every other reader already fell back
   to the record's own `at`. `started` joins `prompt` as a field folding keeps the earliest value
   of, since a harness that writes one record per turn repeats it on every turn.
+- A file the agent created carries its lines. git does not diff an untracked file, so a created
+  file left no line record and `landed` answered `uncertain` about it forever, even once it was
+  committed. Its whole body is the change, so the touch records every line of it.
 - A verdict says which branch. `branch` is the branch the session ran on, `branch_gone` says it
   has since been deleted, `elsewhere` names the branches whose committed copy still holds
   every line, and `anywhere` says whether panjika can point at the lines anywhere. A change made

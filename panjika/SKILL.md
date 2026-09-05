@@ -56,7 +56,7 @@ A verdict is about one working tree. Three fields say which.
 - `branch` is the branch the session ran on.
 - `branch_gone` is true when that branch no longer exists.
 - `elsewhere` names the branches whose committed copy of the file still holds every line. It is
-  filled in for `replaced` and `gone`, and only when a line record exists.
+  filled in for `replaced` and `gone`.
 - `anywhere` is true for `landed`, `partly_landed` and `pending`, and for anything `elsewhere`
   found. It is false for `uncertain`, `unknown` and `untracked` too, because none of those knows
   where the lines are.
